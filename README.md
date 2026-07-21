@@ -7,7 +7,7 @@ than treating a successful `kubectl apply` as sufficient evidence.
 The lab runs in native Ubuntu WSL with Docker and an isolated kind cluster. KubeDrift is
 outside the project boundary and is never reused or modified.
 
-## Current foundation
+## Current capabilities
 
 - project-local `deployctl` operator command
 - checksum-verified kind bootstrap
@@ -15,6 +15,9 @@ outside the project boundary and is never reused or modified.
 - non-root FastAPI inventory service
 - deterministic PostgreSQL schema and seed data
 - Helm chart with a strict values schema
+- Kubernetes 1.35 schema validation with Kubeconform
+- Kyverno workload security and immutable-release policy checks
+- positive and negative fixtures that prove the gates can both pass and fail
 - loopback-only kind port mapping
 - unit and project-contract tests
 
@@ -28,7 +31,12 @@ From the repository root in WSL:
 ./scripts/lab.sh test
 ./scripts/lab.sh build
 ./scripts/lab.sh render
+./scripts/lab.sh validate
 ```
+
+`validate` renders the chart, checks every resource against Kubernetes 1.35 schemas,
+and applies the repository's Kyverno policies. It also proves the validators are active
+by requiring a malformed Deployment and an unsafe workload fixture to fail.
 
 The complete deploy, certify, load, rollback, and evidence workflow will be added in the
 next implementation stages. The design and acceptance criteria are recorded in

@@ -17,6 +17,10 @@ def test_required_foundation_files_exist() -> None:
         "chart/deployproof/values.schema.json",
         "chart/deployproof/templates/deployment.yaml",
         "chart/deployproof/templates/migration-job.yaml",
+        "policies/workload-security.yaml",
+        "policies/release-images.yaml",
+        "tests/fixtures/invalid-deployment.yaml",
+        "tests/fixtures/policy-violation.yaml",
     ):
         assert (ROOT / relative).is_file(), relative
 
@@ -43,8 +47,16 @@ def test_values_schema_rejects_unknown_root_keys_and_latest_tag() -> None:
 def test_container_drops_root() -> None:
     dockerfile = (ROOT / "app/Dockerfile").read_text(encoding="utf-8")
 
-    assert "USER deployproof" in dockerfile
+    assert "USER 10001:10001" in dockerfile
     assert "PIP_NO_CACHE_DIR=1" in dockerfile
+
+
+def test_external_images_are_digest_pinned() -> None:
+    config = (ROOT / "src/deployproof/config.py").read_text(encoding="utf-8")
+    values = yaml.safe_load((ROOT / "chart/deployproof/values.yaml").read_text(encoding="utf-8"))
+
+    assert config.count("@sha256:") == 5
+    assert "@sha256:" in values["postgresql"]["image"]
 
 
 def test_generated_state_is_ignored() -> None:

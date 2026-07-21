@@ -37,7 +37,13 @@ python3 -m venv "${venv_args[@]}" .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements-dev.txt -e .
 
-mkdir -p .tools/bin .secrets artifacts/rendered artifacts/reports artifacts/state
+mkdir -p \
+  .tools/bin \
+  .tools/kubeconform-schemas \
+  .secrets \
+  artifacts/rendered \
+  artifacts/reports \
+  artifacts/state
 
 kind_version="v0.31.0"
 kind_binary=".tools/bin/kind"
@@ -62,10 +68,10 @@ fi
 chmod 600 .secrets/db-password
 
 tool_images=(
-  "alpine/helm:4.2.0"
-  "ghcr.io/yannh/kubeconform:v0.7.0"
-  "ghcr.io/kyverno/kyverno-cli:v1.18.1"
-  "grafana/k6:2.0.0"
+  "alpine/helm:4.2.0@sha256:af08f75a3130d666a50b9fc150f40987ef20b885cf67659aabf4b83a5f2c5501"
+  "ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c"
+  "ghcr.io/kyverno/kyverno-cli:v1.18.1@sha256:b7e272572d244ddec0b83469f7200ba883555bf69de4b294cee52a197c8c6590"
+  "grafana/k6:2.0.0@sha256:a33a0cfdc4d2483d6b7a3a22e726a499ff2831a671a49239104cd34a9937523c"
 )
 for image in "${tool_images[@]}"; do
   if ! docker image inspect "$image" >/dev/null 2>&1; then

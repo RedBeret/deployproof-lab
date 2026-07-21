@@ -1,0 +1,22 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: deployproof-release-images
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: disallow-latest-tag
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+      validate:
+        message: Release containers must not use the latest tag.
+        foreach:
+          - list: request.object.spec.template.spec.containers
+            pattern:
+              image: "!*:latest"
