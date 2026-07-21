@@ -1,23 +1,33 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import Any
 
 from deployproof import __version__
 from deployproof.config import (
     APP_IMAGE_REPOSITORY,
     APP_VERSION,
     ARTIFACTS,
+    CLUSTER_CONFIG,
+    CLUSTER_NAME,
     FIXTURES,
     HELM_IMAGE,
+    KIND_NODE_IMAGE,
+    KUBE_CONTEXT,
+    KUBECONFIG,
     KUBECONFORM_IMAGE,
     KUBERNETES_VERSION,
     KYVERNO_IMAGE,
+    NAMESPACE,
     POLICIES,
+    ROLLOUT_TIMEOUT,
     ROOT,
     SECRETS,
     TOOLS_BIN,
@@ -25,7 +35,11 @@ from deployproof.config import (
 
 
 def run(
-    command: list[str], *, capture: bool = False, check: bool = True
+    command: list[str],
+    *,
+    capture: bool = False,
+    check: bool = True,
+    input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -33,6 +47,7 @@ def run(
         check=check,
         text=True,
         capture_output=capture,
+        input=input_text,
     )
 
 
@@ -83,6 +98,154 @@ def helm_render() -> Path:
     write_atomic(output, result.stdout)
     print(output.relative_to(ROOT))
     return output
+
+
+def kubectl(
+    arguments: list[str],
+    *,
+    namespace: bool = True,
+    capture: bool = False,
+    check: bool = True,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command = [
+        "kubectl",
+        "--kubeconfig",
+        str(KUBECONFIG),
+        "--context",
+        KUBE_CONTEXT,
+    ]
+    if namespace:
+        command.extend(["--namespace", NAMESPACE])
+    command.extend(arguments)
+    return run(command, capture=capture, check=check, input_text=input_text)
+
+
+def nested(value: Any, *keys: str) -> Any:
+    current = value
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def kind_clusters() -> set[str]:
+    result = run([str(TOOLS_BIN / "kind"), "get", "clusters"], capture=True)
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def ensure_cluster_identity() -> None:
+    if CLUSTER_NAME not in kind_clusters():
+        raise RuntimeError(f"kind cluster {CLUSTER_NAME!r} does not exist")
+    if not KUBECONFIG.is_file():
+        raise RuntimeError(f"isolated kubeconfig is missing: {KUBECONFIG}")
+
+    context = kubectl(["config", "current-context"], namespace=False, capture=True).stdout.strip()
+    if context != KUBE_CONTEXT:
+        raise RuntimeError(f"refusing context {context!r}; expected {KUBE_CONTEXT!r}")
+
+    node = f"{CLUSTER_NAME}-control-plane"
+    label = run(
+        [
+            "docker",
+            "inspect",
+            "--format",
+            '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}',
+            node,
+        ],
+        capture=True,
+    ).stdout.strip()
+    if label != CLUSTER_NAME:
+        raise RuntimeError(f"refusing Docker node {node!r} with cluster label {label!r}")
+
+
+def wait_for_cluster_ready(timeout_seconds: int = 90) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    last_error = "cluster API did not respond"
+    while time.monotonic() < deadline:
+        result = kubectl(
+            ["get", "nodes", "--output", "json"], namespace=False, capture=True, check=False
+        )
+        if result.returncode == 0:
+            try:
+                nodes = json.loads(result.stdout).get("items", [])
+            except json.JSONDecodeError as error:
+                last_error = f"invalid node response: {error}"
+            else:
+                ready = [
+                    node
+                    for node in nodes
+                    if any(
+                        condition.get("type") == "Ready" and condition.get("status") == "True"
+                        for condition in nested(node, "status", "conditions") or []
+                    )
+                ]
+                if ready:
+                    print(f"ok cluster API ready with {len(ready)} node(s)")
+                    return
+                last_error = "cluster API responded but no node is Ready"
+        else:
+            last_error = (result.stderr or result.stdout).strip() or last_error
+        time.sleep(2)
+    raise RuntimeError(f"cluster did not become ready within {timeout_seconds}s: {last_error}")
+
+
+def create_cluster() -> None:
+    if CLUSTER_NAME in kind_clusters():
+        ensure_cluster_identity()
+        node = f"{CLUSTER_NAME}-control-plane"
+        running = run(
+            ["docker", "inspect", "--format", "{{.State.Running}}", node],
+            capture=True,
+        ).stdout.strip()
+        if running != "true":
+            run(["docker", "start", node])
+            print(f"ok restarted stopped project node {node}")
+        wait_for_cluster_ready()
+        print(f"ok existing isolated cluster {CLUSTER_NAME}")
+        return
+
+    KUBECONFIG.parent.mkdir(parents=True, exist_ok=True)
+    KUBECONFIG.unlink(missing_ok=True)
+    run(
+        [
+            str(TOOLS_BIN / "kind"),
+            "create",
+            "cluster",
+            "--name",
+            CLUSTER_NAME,
+            "--image",
+            KIND_NODE_IMAGE,
+            "--config",
+            str(CLUSTER_CONFIG),
+            "--kubeconfig",
+            str(KUBECONFIG),
+            "--wait",
+            ROLLOUT_TIMEOUT,
+        ]
+    )
+    ensure_cluster_identity()
+    wait_for_cluster_ready()
+    print(f"ok created isolated cluster {CLUSTER_NAME}")
+
+
+def cluster_status() -> None:
+    ensure_cluster_identity()
+    wait_for_cluster_ready()
+    result = kubectl(["cluster-info"], namespace=False, capture=True)
+    print(result.stdout, end="")
+    print(f"ok context {KUBE_CONTEXT}")
+
+
+def delete_cluster() -> None:
+    if CLUSTER_NAME not in kind_clusters():
+        print(f"ok cluster {CLUSTER_NAME} is already absent")
+        return
+    ensure_cluster_identity()
+    run([str(TOOLS_BIN / "kind"), "delete", "cluster", "--name", CLUSTER_NAME])
+    KUBECONFIG.unlink(missing_ok=True)
+    print(f"ok deleted isolated cluster {CLUSTER_NAME}")
 
 
 def project_path(path: Path) -> str:
@@ -228,6 +391,11 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("render", help="render the Helm release")
     commands.add_parser("validate", help="run static manifest and policy gates")
     commands.add_parser("test", help="run local validation")
+    cluster = commands.add_parser("cluster", help="manage only the isolated DeployProof cluster")
+    cluster_commands = cluster.add_subparsers(dest="cluster_command", required=True)
+    cluster_commands.add_parser("create", help="create or verify the isolated cluster")
+    cluster_commands.add_parser("status", help="show the isolated cluster status")
+    cluster_commands.add_parser("delete", help="delete only the isolated cluster")
     return root
 
 
@@ -248,6 +416,17 @@ def main() -> int:
     if arguments.command == "test":
         test_project()
         return 0
+    if arguments.command == "cluster":
+        if arguments.cluster_command == "create":
+            create_cluster()
+            return 0
+        if arguments.cluster_command == "status":
+            cluster_status()
+            return 0
+        if arguments.cluster_command == "delete":
+            delete_cluster()
+            return 0
+        raise AssertionError(arguments.cluster_command)
     raise AssertionError(arguments.command)
 
 
