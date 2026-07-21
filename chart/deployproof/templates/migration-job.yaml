@@ -15,6 +15,12 @@ spec:
         app.kubernetes.io/component: migration
     spec:
       restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: migrate
           image: {{ .Values.postgresql.image | quote }}
@@ -40,9 +46,18 @@ spec:
                   name: {{ .Values.postgresql.existingSecret }}
                   key: {{ .Values.postgresql.passwordKey }}
           securityContext:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
           volumeMounts:
             - name: migrations
               mountPath: /migrations

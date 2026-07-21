@@ -1,0 +1,65 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: deployproof-workload-security
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-non-root-pods
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+      validate:
+        message: Workloads must run as non-root with the RuntimeDefault seccomp profile.
+        pattern:
+          spec:
+            template:
+              spec:
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+    - name: require-hardened-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+      validate:
+        message: Containers must prevent privilege escalation and drop all capabilities.
+        foreach:
+          - list: request.object.spec.template.spec.containers
+            pattern:
+              securityContext:
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+    - name: require-container-resources
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+      validate:
+        message: Containers must declare CPU and memory requests and limits.
+        foreach:
+          - list: request.object.spec.template.spec.containers
+            pattern:
+              resources:
+                requests:
+                  cpu: "?*"
+                  memory: "?*"
+                limits:
+                  cpu: "?*"
+                  memory: "?*"

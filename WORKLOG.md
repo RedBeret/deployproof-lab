@@ -43,3 +43,25 @@
 
 Next: add policy and manifest validation with Kubeconform and Kyverno, including
 positive and negative fixtures.
+
+## 2026-07-20 - Stage 3
+
+- Added strict Kubeconform validation against Kubernetes 1.35 schemas.
+- Added Kyverno rules for non-root workloads, RuntimeDefault seccomp, disabled
+  privilege escalation, dropped Linux capabilities, resource requests/limits, and
+  rejection of the `latest` tag.
+- Added malformed-schema and unsafe-workload fixtures that must fail validation.
+- Hardened the API image to use numeric UID/GID 10001 so Kubernetes can prove it is
+  non-root before starting the container.
+- Added non-root pod settings for PostgreSQL and the migration Job and bounded the
+  migration Job's CPU and memory.
+- Pinned the Python base image, PostgreSQL image, and all containerized project tools
+  by SHA256 digest.
+- Confirmed all seven rendered resources pass schema checks and all 12 applicable
+  Kyverno evaluations pass.
+- Confirmed both deliberate negative fixtures exit non-zero and identify the fixture
+  that was rejected.
+- Added `deployctl validate` and made the normal test command run the same static gate.
+
+Next: create the isolated kind cluster, deploy the chart, and compare the declared
+release contract with live Kubernetes, application, configuration, and database state.

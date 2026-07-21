@@ -20,10 +20,13 @@ upstream sources:
 | --- | --- |
 | kind | 0.31.0 |
 | kind node | Kubernetes 1.35.0, pinned by digest |
-| Helm | 4.2.0 |
-| Kubeconform | 0.7.0 |
-| Kyverno CLI | 1.18.1 |
-| k6 | 2.0.0 |
+| Helm | 4.2.0, pinned by digest |
+| Kubeconform | 0.7.0, pinned by digest |
+| Kyverno CLI | 1.18.1, pinned by digest |
+| k6 | 2.0.0, pinned by digest |
+| Python base image | 3.12.11 slim, pinned by digest |
+| PostgreSQL | 17.6 Alpine, pinned by digest |
 
-The bootstrap must verify downloaded binaries or use immutable container-image digests
-before the final release.
+The kind binary download is verified against the upstream SHA256 checksum. Every
+containerized project tool and third-party runtime image is referenced by an immutable
+SHA256 digest.

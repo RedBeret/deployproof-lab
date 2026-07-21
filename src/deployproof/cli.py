@@ -12,24 +12,33 @@ from deployproof.config import (
     APP_IMAGE_REPOSITORY,
     APP_VERSION,
     ARTIFACTS,
+    FIXTURES,
     HELM_IMAGE,
+    KUBECONFORM_IMAGE,
+    KUBERNETES_VERSION,
+    KYVERNO_IMAGE,
+    POLICIES,
     ROOT,
     SECRETS,
     TOOLS_BIN,
 )
 
 
-def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
+def run(
+    command: list[str], *, capture: bool = False, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
         cwd=ROOT,
-        check=True,
+        check=check,
         text=True,
         capture_output=capture,
     )
 
 
-def docker_tool(image: str, arguments: list[str]) -> subprocess.CompletedProcess[str]:
+def docker_tool(
+    image: str, arguments: list[str], *, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     return run(
         [
             "docker",
@@ -43,6 +52,7 @@ def docker_tool(image: str, arguments: list[str]) -> subprocess.CompletedProcess
             *arguments,
         ],
         capture=True,
+        check=check,
     )
 
 
@@ -73,6 +83,88 @@ def helm_render() -> Path:
     write_atomic(output, result.stdout)
     print(output.relative_to(ROOT))
     return output
+
+
+def project_path(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
+
+
+def print_process(result: subprocess.CompletedProcess[str]) -> None:
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+
+
+def require_result(
+    result: subprocess.CompletedProcess[str], label: str, *, should_pass: bool
+) -> None:
+    if should_pass:
+        print_process(result)
+        if result.returncode != 0:
+            raise RuntimeError(f"{label} failed with exit code {result.returncode}")
+        print(f"ok {label}")
+        return
+
+    combined = f"{result.stdout}\n{result.stderr}"
+    if result.returncode == 0:
+        raise RuntimeError(f"{label} unexpectedly passed")
+    if "fixture" not in combined:
+        raise RuntimeError(f"{label} failed without identifying the fixture")
+    print(f"ok {label}")
+
+
+def kubeconform(resource: Path) -> subprocess.CompletedProcess[str]:
+    (TOOLS_BIN.parent / "kubeconform-schemas").mkdir(parents=True, exist_ok=True)
+    return docker_tool(
+        KUBECONFORM_IMAGE,
+        [
+            "-strict",
+            "-summary",
+            "-verbose",
+            "-kubernetes-version",
+            KUBERNETES_VERSION,
+            "-cache",
+            "/workspace/.tools/kubeconform-schemas",
+            project_path(resource),
+        ],
+        check=False,
+    )
+
+
+def kyverno(resource: Path) -> subprocess.CompletedProcess[str]:
+    return docker_tool(
+        KYVERNO_IMAGE,
+        [
+            "apply",
+            project_path(POLICIES),
+            "--resource",
+            project_path(resource),
+            "--continue-on-fail",
+            "--detailed-results",
+            "--remove-color",
+            "--table",
+        ],
+        check=False,
+    )
+
+
+def validate_static() -> None:
+    helm_lint()
+    rendered = helm_render()
+
+    require_result(kubeconform(rendered), "rendered Kubernetes schema", should_pass=True)
+    require_result(
+        kubeconform(FIXTURES / "invalid-deployment.yaml"),
+        "invalid Kubernetes fixture rejection",
+        should_pass=False,
+    )
+    require_result(kyverno(rendered), "rendered workload policies", should_pass=True)
+    require_result(
+        kyverno(FIXTURES / "policy-violation.yaml"),
+        "unsafe workload fixture rejection",
+        should_pass=False,
+    )
 
 
 def build_image() -> str:
@@ -123,8 +215,7 @@ def test_project() -> None:
     ]
     for command in commands:
         run(command)
-    helm_lint()
-    helm_render()
+    validate_static()
 
 
 def parser() -> argparse.ArgumentParser:
@@ -134,6 +225,7 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("doctor", help="check the local operator environment")
     commands.add_parser("build", help="build the sample application image")
     commands.add_parser("render", help="render the Helm release")
+    commands.add_parser("validate", help="run static manifest and policy gates")
     commands.add_parser("test", help="run local validation")
     return root
 
@@ -148,6 +240,9 @@ def main() -> int:
     if arguments.command == "render":
         helm_lint()
         helm_render()
+        return 0
+    if arguments.command == "validate":
+        validate_static()
         return 0
     if arguments.command == "test":
         test_project()
