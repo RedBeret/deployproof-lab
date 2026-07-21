@@ -62,8 +62,16 @@ if [[ ! -x "$kind_binary" ]] || ! "$kind_binary" version | grep -Fq "$kind_versi
 fi
 
 if [[ ! -f .secrets/db-password ]]; then
-  .venv/bin/python -c 'import secrets; print(secrets.token_urlsafe(36))' \
+  .venv/bin/python -c 'import secrets, sys; sys.stdout.write(secrets.token_urlsafe(36))' \
     > .secrets/db-password
+else
+  normalized_password="$(tr -d '\r\n' < .secrets/db-password)"
+  if [[ -z "$normalized_password" ]]; then
+    echo "Generated database credential is empty." >&2
+    exit 1
+  fi
+  printf '%s' "$normalized_password" > .secrets/db-password
+  unset normalized_password
 fi
 chmod 600 .secrets/db-password
 

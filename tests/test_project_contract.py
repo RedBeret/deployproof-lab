@@ -59,6 +59,22 @@ def test_external_images_are_digest_pinned() -> None:
     assert "@sha256:" in values["postgresql"]["image"]
 
 
+def test_postgresql_owns_its_data_directory() -> None:
+    statefulset = (ROOT / "chart/deployproof/templates/postgresql-statefulset.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "value: /var/lib/postgresql/data/database" in statefulset
+    assert "subPath:" not in statefulset
+
+
+def test_bootstrap_generates_credential_without_line_endings() -> None:
+    bootstrap = (ROOT / "scripts/bootstrap.sh").read_text(encoding="utf-8")
+
+    assert "sys.stdout.write(secrets.token_urlsafe(36))" in bootstrap
+    assert "tr -d '\\r\\n'" in bootstrap
+
+
 def test_generated_state_is_ignored() -> None:
     patterns = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
 

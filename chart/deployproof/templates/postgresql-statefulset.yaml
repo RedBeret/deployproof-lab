@@ -40,6 +40,8 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgresql.existingSecret }}
                   key: {{ .Values.postgresql.passwordKey }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/database
           readinessProbe:
             exec:
               command:
@@ -63,7 +65,6 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
-              subPath: pgdata
   volumeClaimTemplates:
     - metadata:
         name: data
