@@ -78,9 +78,8 @@ Kubernetes, application, and database state and produces 13 comparisons:
 | Database | migration version, table row counts, canonical data hash |
 
 Every comparison records the expected value, the observed value, and a pass field to
-`artifacts/state/live-certification.json`. Comparisons are equality checks against an
-observed value that may be absent, so a reading the cluster does not supply compares
-unequal and fails. A missing observation is never treated as a pass.
+`artifacts/state/live-certification.json`. A reading the cluster does not supply compares
+unequal and fails, so a missing observation is not a pass.
 
 When a deploy fails, Helm status, cluster resources, events, and each pod's description
 and logs are written to `artifacts/state/deploy-diagnostics.txt`.
@@ -89,46 +88,40 @@ and logs are written to `artifacts/state/deploy-diagnostics.txt`.
 
 Every kubectl invocation is built by one wrapper that pins the project kubeconfig, the
 `kind-deployproof` context, and the `deployproof` namespace, so no command inherits an
-ambient context. Before any cluster-scoped or destructive action, three checks must all
-agree: kind reports a cluster named `deployproof`, the project kubeconfig resolves to
-context `kind-deployproof`, and the Docker node carries the label
-`io.x-k8s.kind.cluster=deployproof`. A stale or switched context satisfies at most one,
-so it cannot reach another cluster. Teardown removes only the `deployproof` cluster.
+ambient context. Before any cluster-scoped or destructive action, kind must report a
+cluster named `deployproof`, the kubeconfig must resolve to context `kind-deployproof`,
+and the Docker node must carry the label `io.x-k8s.kind.cluster=deployproof`. Teardown
+removes only the `deployproof` cluster.
 
 ## Challenges and resolutions
 
-These are the defects found while bringing the first live deployment up. Each one is
-now covered by a test.
+Defects found while bringing up the first live deployment. Each is covered by a test.
 
 **PostgreSQL never initialized.** The data volume was mounted with `subPath: pgdata`.
-Kubernetes creates a `subPath` directory as root and bind-mounts it into the container,
-so `initdb` running as UID 10001 could not `chmod` it and failed with
-`Operation not permitted`. The database never started, and the migration Job and the API
-waited on it until the rollout timed out. The volume root is now mounted directly and
-`PGDATA` points at a child directory that PostgreSQL creates and therefore owns.
+Kubernetes creates a `subPath` directory as root, so `initdb` running as UID 10001 could
+not `chmod` it and failed with `Operation not permitted`. The migration Job and the API
+then waited on a database that never started. The volume root is now mounted directly
+and `PGDATA` points at a child directory PostgreSQL creates and owns.
 
 **Database authentication failed with a correct-looking password.** The generated
-credential was written with a trailing newline. `kubectl create secret --from-file`
-stores file bytes verbatim, so the newline became part of the credential. Hashing the
-local file and the Kubernetes Secret showed them identical, which ruled out a mismatch
-and pointed at the bytes themselves. Bootstrap now writes the credential with no
-trailing newline and normalizes an existing file in place, `doctor` fails on a
-credential that is empty or contains a line ending, and `deploy` refuses to apply one.
+credential was written with a trailing newline, and `kubectl create secret --from-file`
+stores file bytes verbatim, so the newline became part of the password. Hashing the local
+file and the Kubernetes Secret showed them identical, which ruled out a mismatch and
+pointed at the bytes themselves. Bootstrap now writes the credential without a trailing
+newline and normalizes an existing file, `doctor` fails on a credential that is empty or
+contains a line ending, and `deploy` refuses to apply one.
 
 **Every deploy after the first failed its server-side dry run.** The dry run used its own
-field manager, so the API server reported ownership conflicts against the fields Helm
-already owned. The dry run now uses Helm's field manager and matches what the real
-install will do.
+field manager, so the API server reported ownership conflicts against fields Helm already
+owned. It now uses Helm's field manager.
 
 **A timed-out install blocked retries.** The first failed attempt left the release in
-`pending-install`, and later attempts were refused because of the release state rather
-than any new problem. Check `helm status` and `helm history` before retrying; the fix is
-to the release state, not the chart.
+`pending-install`, and later attempts were refused for the release state rather than any
+new problem. Check `helm status` and `helm history` before retrying.
 
-**Diagnostics failed while reporting a failure.** The diagnostic collector passed a
-`helm status` flag that the pinned Helm version rejects, so the deploy failure was
-reported without the evidence needed to diagnose it. Diagnostic commands are now limited
-to flags the pinned tool versions accept.
+**Diagnostics failed while reporting a failure.** The collector passed a `helm status`
+flag the pinned Helm version rejects, so a failed deploy was reported without the
+evidence needed to diagnose it.
 
 ## Status
 
