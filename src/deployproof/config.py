@@ -8,6 +8,8 @@ TOOLS_BIN = ROOT / ".tools" / "bin"
 SECRETS = ROOT / ".secrets"
 POLICIES = ROOT / "policies"
 FIXTURES = ROOT / "tests" / "fixtures"
+KUBECONFIG = ROOT / ".kube" / "deployproof.yaml"
+CLUSTER_CONFIG = ROOT / "kind" / "cluster.yaml"
 
 CLUSTER_NAME = "deployproof"
 KUBE_CONTEXT = "kind-deployproof"
@@ -15,6 +17,7 @@ NAMESPACE = "deployproof"
 RELEASE_NAME = "deployproof"
 HOST_PORT = 18082
 NODE_PORT = 30082
+ROLLOUT_TIMEOUT = "180s"
 
 KIND_VERSION = "v0.31.0"
 KUBERNETES_VERSION = "1.35.0"
