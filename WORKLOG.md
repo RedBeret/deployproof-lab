@@ -65,3 +65,30 @@ positive and negative fixtures.
 
 Next: create the isolated kind cluster, deploy the chart, and compare the declared
 release contract with live Kubernetes, application, configuration, and database state.
+
+## 2026-07-21 - Stage 4
+
+- Added `deployctl cluster create`, `status`, and `delete` for the isolated cluster.
+- Required kind, the project kubeconfig context, and the Docker node label to agree
+  before any cluster-scoped or destructive action.
+- Routed every kubectl invocation through one wrapper that pins the kubeconfig, the
+  context, and the namespace.
+- Waited for the API server to report a Ready node rather than trusting kind's own wait.
+- Added `deployctl deploy` and `deployctl certify` and the declared release contract.
+- Fixed the PostgreSQL data directory so `initdb` owns it; the previous `subPath` mount
+  was created as root and could not be chmod'd by UID 10001.
+- Removed the trailing newline from the generated database credential, which
+  `kubectl create secret --from-file` had been storing as part of the password.
+- Used Helm's field manager for the server-side dry run so repeat deploys do not fail on
+  field ownership conflicts.
+- Restricted diagnostic commands to flags the pinned Helm version accepts.
+- Added automatic diagnostics collection for failed deploys.
+- Confirmed a clean-room deploy from a deleted cluster installs revision 1 and passes all
+  13 comparisons with no manual intervention.
+- Confirmed a second deploy against the existing release installs revision 2 and passes
+  all 13 comparisons.
+- Confirmed KubeDrift was untouched throughout.
+- Passed 31 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: add smoke, integration, k6 load, failure-injection, and rollback gates.
