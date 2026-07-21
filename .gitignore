@@ -2,6 +2,7 @@
 .secrets/
 .tools/
 .venv/
+.docker/
 __pycache__/
 *.py[cod]
 .pytest_cache/

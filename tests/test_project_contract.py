@@ -1,0 +1,56 @@
+import json
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_required_foundation_files_exist() -> None:
+    for relative in (
+        "scripts/bootstrap.sh",
+        "scripts/lab.sh",
+        "kind/cluster.yaml",
+        "app/Dockerfile",
+        "chart/deployproof/Chart.yaml",
+        "chart/deployproof/values.yaml",
+        "chart/deployproof/values.schema.json",
+        "chart/deployproof/templates/deployment.yaml",
+        "chart/deployproof/templates/migration-job.yaml",
+    ):
+        assert (ROOT / relative).is_file(), relative
+
+
+def test_kind_port_is_loopback_only() -> None:
+    cluster = yaml.safe_load((ROOT / "kind/cluster.yaml").read_text(encoding="utf-8"))
+    mapping = cluster["nodes"][0]["extraPortMappings"][0]
+
+    assert mapping == {
+        "containerPort": 30082,
+        "hostPort": 18082,
+        "listenAddress": "127.0.0.1",
+        "protocol": "TCP",
+    }
+
+
+def test_values_schema_rejects_unknown_root_keys_and_latest_tag() -> None:
+    schema = json.loads((ROOT / "chart/deployproof/values.schema.json").read_text(encoding="utf-8"))
+
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["image"]["properties"]["tag"]["not"] == {"const": "latest"}
+
+
+def test_container_drops_root() -> None:
+    dockerfile = (ROOT / "app/Dockerfile").read_text(encoding="utf-8")
+
+    assert "USER deployproof" in dockerfile
+    assert "PIP_NO_CACHE_DIR=1" in dockerfile
+
+
+def test_generated_state_is_ignored() -> None:
+    patterns = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+    assert ".tools/" in patterns
+    assert ".secrets/" in patterns
+    assert ".kube/" in patterns
+    assert "artifacts/*" in patterns

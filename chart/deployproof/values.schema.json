@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "image",
+    "application",
+    "configuration",
+    "service",
+    "postgresql",
+    "resources"
+  ],
+  "properties": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string", "minLength": 1, "not": {"const": "latest"}},
+        "pullPolicy": {"enum": ["IfNotPresent", "Never"]}
+      }
+    },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "sourceRevision"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1},
+        "sourceRevision": {"type": "string", "minLength": 1}
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "customerRegion", "featureMode"],
+      "properties": {
+        "environment": {"type": "string", "minLength": 1},
+        "customerRegion": {"type": "string", "minLength": 1},
+        "featureMode": {"enum": ["standard", "restricted"]}
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodePort"],
+      "properties": {
+        "nodePort": {"type": "integer", "const": 30082}
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "database", "user", "existingSecret", "passwordKey", "storage"],
+      "properties": {
+        "image": {"type": "string", "minLength": 1},
+        "database": {"type": "string", "const": "deployproof"},
+        "user": {"type": "string", "const": "deployproof"},
+        "existingSecret": {"type": "string", "minLength": 1},
+        "passwordKey": {"type": "string", "minLength": 1},
+        "storage": {"type": "string", "pattern": "^[0-9]+(Mi|Gi)$"}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests", "limits"],
+      "properties": {
+        "requests": {"$ref": "#/$defs/resources"},
+        "limits": {"$ref": "#/$defs/resources"}
+      }
+    }
+  },
+  "$defs": {
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": {
+        "cpu": {"type": "string", "minLength": 1},
+        "memory": {"type": "string", "pattern": "^[0-9]+(Mi|Gi)$"}
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deployproof-migrations
+  labels:
+    {{- include "deployproof.labels" . | nindent 4 }}
+data:
+  001_schema.sql: |-
+{{ .Files.Get "files/migrations/001_schema.sql" | indent 4 }}
+  002_seed.sql: |-
+{{ .Files.Get "files/migrations/002_seed.sql" | indent 4 }}

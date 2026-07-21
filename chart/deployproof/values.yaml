@@ -1,0 +1,32 @@
+image:
+  repository: deployproof-api
+  tag: dev
+  pullPolicy: IfNotPresent
+
+application:
+  version: "0.1.0"
+  sourceRevision: local
+
+configuration:
+  environment: certification
+  customerRegion: lab-west
+  featureMode: standard
+
+service:
+  nodePort: 30082
+
+postgresql:
+  image: postgres:17.6-alpine
+  database: deployproof
+  user: deployproof
+  existingSecret: deployproof-db
+  passwordKey: password
+  storage: 512Mi
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

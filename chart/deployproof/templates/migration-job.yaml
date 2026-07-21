@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deployproof-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "deployproof.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: deployproof
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: {{ .Values.postgresql.image | quote }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              until pg_isready --host="$PGHOST" --username="$PGUSER"; do sleep 2; done
+              psql --set=ON_ERROR_STOP=1 --file=/migrations/001_schema.sql
+              psql --set=ON_ERROR_STOP=1 --file=/migrations/002_seed.sql
+          env:
+            - name: PGHOST
+              value: deployproof-postgresql
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: {{ .Values.postgresql.database | quote }}
+            - name: PGUSER
+              value: {{ .Values.postgresql.user | quote }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.existingSecret }}
+                  key: {{ .Values.postgresql.passwordKey }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+      volumes:
+        - name: migrations
+          configMap:
+            name: deployproof-migrations

@@ -1,0 +1,1 @@
+"""DeployProof sample application."""
