@@ -81,13 +81,12 @@ release contract with live Kubernetes, application, configuration, and database 
   `kubectl create secret --from-file` had been storing as part of the password.
 - Used Helm's field manager for the server-side dry run so repeat deploys do not fail on
   field ownership conflicts.
-- Restricted diagnostic commands to flags the pinned Helm version accepts.
-- Added automatic diagnostics collection for failed deploys.
-- Confirmed a clean-room deploy from a deleted cluster installs revision 1 and passes all
-  13 comparisons with no manual intervention.
+- Added diagnostics collection for failed deploys and restricted it to flags the pinned
+  Helm version accepts.
+- Confirmed a deploy from a deleted cluster installs revision 1 and passes all 13
+  comparisons without manual intervention.
 - Confirmed a second deploy against the existing release installs revision 2 and passes
   all 13 comparisons.
-- Confirmed KubeDrift was untouched throughout.
 - Passed 31 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
   negative fixtures.
 
