@@ -16,3 +16,7 @@ dist/
 .kube/
 artifacts/*
 !artifacts/.gitkeep
+
+CLAUDE.md
+.claude/
+*.local.md
