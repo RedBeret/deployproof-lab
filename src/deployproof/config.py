@@ -10,6 +10,7 @@ POLICIES = ROOT / "policies"
 FIXTURES = ROOT / "tests" / "fixtures"
 KUBECONFIG = ROOT / ".kube" / "deployproof.yaml"
 CLUSTER_CONFIG = ROOT / "kind" / "cluster.yaml"
+RELEASE_CONTRACT = ROOT / "release" / "contract.yaml"
 
 CLUSTER_NAME = "deployproof"
 KUBE_CONTEXT = "kind-deployproof"
