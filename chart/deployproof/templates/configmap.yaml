@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deployproof-config
+  labels:
+    {{- include "deployproof.labels" . | nindent 4 }}
+data:
+  APP_ENVIRONMENT: {{ .Values.configuration.environment | quote }}
+  CUSTOMER_REGION: {{ .Values.configuration.customerRegion | quote }}
+  FEATURE_MODE: {{ .Values.configuration.featureMode | quote }}
