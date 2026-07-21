@@ -1,0 +1,21 @@
+formatVersion: 1
+release:
+  application: deployproof-inventory
+  applicationVersion: "0.1.0"
+  image: deployproof-api:0.1.0
+  sourceRevision: git-head
+  namespace: deployproof
+configuration:
+  environment: certification
+  customerRegion: lab-west
+  featureMode: standard
+expected:
+  configurationSha256: e1660a749c2b5fa06af86acf057a0f4e71e24e1d08ddf5b2312e60aa1473f726
+  migrationVersion: "002"
+  rowCounts:
+    inventory_items: 6
+  dataSha256: 608ca8881d3034ad95660ce933815a8175aced16a74b70e11a9e400105804319
+  apiReplicas: 1
+  databaseReplicas: 1
+  completedMigrationJobs: 1
+rolloutTimeout: 180s

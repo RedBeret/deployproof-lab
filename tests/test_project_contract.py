@@ -19,6 +19,7 @@ def test_required_foundation_files_exist() -> None:
         "chart/deployproof/templates/migration-job.yaml",
         "policies/workload-security.yaml",
         "policies/release-images.yaml",
+        "release/contract.yaml",
         "tests/fixtures/invalid-deployment.yaml",
         "tests/fixtures/policy-violation.yaml",
     ):
