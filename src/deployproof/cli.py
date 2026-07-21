@@ -195,10 +195,11 @@ def doctor() -> int:
         failures.append("project kind binary missing; run scripts/bootstrap.sh")
 
     password = SECRETS / "db-password"
-    if password.is_file():
+    password_bytes = password.read_bytes() if password.is_file() else b""
+    if password_bytes and b"\r" not in password_bytes and b"\n" not in password_bytes:
         print("ok generated database credential")
     else:
-        failures.append("generated database credential missing")
+        failures.append("generated database credential missing, empty, or contains a line ending")
 
     for failure in failures:
         print(f"error {failure}", file=sys.stderr)
