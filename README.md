@@ -24,6 +24,7 @@ outside the project boundary and is never reused or modified.
 - image digest recorded when the image is loaded, so the running container is certified by content and not by its mutable tag
 - source revision baked into the image at build time, so a stale image reports the revision it was built from rather than one supplied at deploy
 - 14 declared-versus-observed release comparisons written to a JSON report
+- a self-cleaning live gate check that drifts real database state, confirms certification rejects it, and restores the state
 - failure diagnostics collected automatically when a deploy fails
 - unit, cluster, certification, and project-contract tests
 
@@ -98,6 +99,22 @@ variable, which would have reported whatever the deploy supplied regardless of t
 
 When a deploy fails, Helm status, cluster resources, events, and each pod's description
 and logs are written to `artifacts/state/deploy-diagnostics.txt`.
+
+## Proving the live gate can fail
+
+The static gate keeps negative fixtures that must be rejected. The live gate has one too:
+
+```bash
+./scripts/lab.sh verify-gate
+```
+
+It expects a green release, so run it after a deploy. It certifies the baseline, inserts a
+probe row into `inventory_items`, and certifies again; the drift must fail exactly
+`database.row_counts` and `database.data_sha256` and nothing else. It then deletes the probe
+row and certifies a third time to confirm the gate returns to green. The probe row is removed
+before the baseline as well, so an interrupted run does not leave the database dirty. The
+drift is a real database change rather than an edited report, and it touches no Kubernetes
+resource, so it cannot split field ownership the way an out-of-band `kubectl patch` would.
 
 ## Isolation
 
