@@ -17,6 +17,7 @@ spec:
         app.kubernetes.io/component: api
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        deployproof.dev/image-digest: {{ .Values.application.imageDigest | quote }}
     spec:
       securityContext:
         runAsNonRoot: true

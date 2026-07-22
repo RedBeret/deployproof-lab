@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACTS = ROOT / "artifacts"
+IMAGE_DIGEST_FILE = ARTIFACTS / "state" / "image-digest.txt"
 TOOLS_BIN = ROOT / ".tools" / "bin"
 SECRETS = ROOT / ".secrets"
 POLICIES = ROOT / "policies"

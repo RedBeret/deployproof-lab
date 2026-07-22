@@ -21,7 +21,8 @@ outside the project boundary and is never reused or modified.
 - loopback-only kind port mapping
 - isolated cluster lifecycle with a three-part identity check before any destructive action
 - live deployment with a bounded, ordered rollout
-- 13 declared-versus-observed release comparisons written to a JSON report
+- image digest recorded when the image is loaded, so the running container is certified by content and not by its mutable tag
+- 14 declared-versus-observed release comparisons written to a JSON report
 - failure diagnostics collected automatically when a deploy fails
 - unit, cluster, certification, and project-contract tests
 
@@ -68,18 +69,25 @@ Cluster commands act only on the `deployproof` cluster:
 ## What certification compares
 
 `release/contract.yaml` declares the expected release. Certification reads live
-Kubernetes, application, and database state and produces 13 comparisons:
+Kubernetes, application, and database state and produces 14 comparisons:
 
 | Area | Comparisons |
 | --- | --- |
 | Release identity | application, version, source revision |
-| Kubernetes | deployment image, ConfigMap contents, API replicas, database replicas, completed migration Jobs |
+| Kubernetes | deployment image, image digest, ConfigMap contents, API replicas, database replicas, completed migration Jobs |
 | Configuration | declared values, configuration fingerprint |
 | Database | migration version, table row counts, canonical data hash |
 
 Every comparison records the expected value, the observed value, and a pass field to
 `artifacts/state/live-certification.json`. A reading the cluster does not supply compares
 unequal and fails, so a missing observation is not a pass.
+
+The deployment image comparison only checks the tag the Deployment asks for, and the tag
+is mutable. `deploy` records the digest of the image it loads into the node to
+`artifacts/state/image-digest.txt`, stamps it onto the pod template, and certification
+compares it against the digest the running container actually reports. The stamp also
+means a rebuilt image under the same tag rolls the pod instead of leaving the old one in
+place, so the certified digest is the one serving traffic.
 
 When a deploy fails, Helm status, cluster resources, events, and each pod's description
 and logs are written to `artifacts/state/deploy-diagnostics.txt`.
@@ -114,6 +122,12 @@ contains a line ending, and `deploy` refuses to apply one.
 **Every deploy after the first failed its server-side dry run.** The dry run used its own
 field manager, so the API server reported ownership conflicts against fields Helm already
 owned. It now uses Helm's field manager.
+
+**A rebuilt image left the old container running.** The tag and every chart value stayed
+the same across a rebuild, so Helm saw no change to the pod template and kept the existing
+pod, which certified green against a stale binary until a manual restart. The deploy now
+stamps the loaded image digest onto the pod template, so a content change rolls the pod,
+and certification compares that digest against the one the running container reports.
 
 **A timed-out install blocked retries.** The first failed attempt left the release in
 `pending-install`, and later attempts were refused for the release state rather than any
