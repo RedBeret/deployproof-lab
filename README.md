@@ -1,11 +1,14 @@
 # DeployProof Lab
 
-DeployProof Lab is a Kubernetes release-certification project. It will prove that a
-candidate release was configured, installed, loaded, exercised, and recoverable rather
-than treating a successful `kubectl apply` as sufficient evidence.
+DeployProof Lab is a Kubernetes release-certification project. It proves that a candidate
+release was configured, installed, loaded, and exercised correctly, rather than treating a
+successful `kubectl apply` as sufficient evidence. It deploys a small inventory API and its
+PostgreSQL database into an isolated kind cluster, compares a declared release contract
+against live Kubernetes, application, and database state, and runs smoke, integration, and
+load gates against the running service.
 
-The lab runs in native Ubuntu WSL with Docker and an isolated kind cluster. KubeDrift is
-outside the project boundary and is never reused or modified.
+The lab runs in native Ubuntu WSL with Docker. KubeDrift is outside the project boundary and
+is never reused or modified.
 
 ## Current capabilities
 
@@ -30,7 +33,26 @@ outside the project boundary and is never reused or modified.
 - a k6 load gate whose latency, error-rate, and check-rate thresholds live in the contract and exit non-zero when breached
 - certification evidence written as JSON, Markdown, and JUnit from one result, all agreeing on outcome and counts
 - failure diagnostics collected automatically when a deploy fails
-- unit, cluster, certification, and project-contract tests
+- unit, contract, and gate tests covering the certification, cluster, and gate logic
+
+## Commands
+
+Every command is invoked through `./scripts/lab.sh`, which pins the project tools and the
+isolated cluster context.
+
+| Command | What it proves | Evidence |
+| --- | --- | --- |
+| `doctor` | the local operator environment is ready | — |
+| `test` | unit and contract tests and the static gate pass | — |
+| `validate` | the chart passes schema and policy, and the validators reject bad fixtures | `artifacts/rendered/` |
+| `deploy` | the release installs and then certifies against the contract | `artifacts/state/live-certification.json` |
+| `certify` | the declared contract matches live Kubernetes, app, and database state | `artifacts/state/live-certification.json` |
+| `smoke` | each declared endpoint returns the right status and body | `artifacts/state/smoke.json` |
+| `integration` | the running app faithfully reflects its live database | `artifacts/state/integration.json` |
+| `load` | the release meets the contract's latency, error, and check thresholds under load | `artifacts/state/load.json` |
+| `evidence` | one certification result as agreeing JSON, Markdown, and JUnit | `artifacts/evidence/` |
+| `verify-gate` | the live certification gate rejects drift and self-recovers | — |
+| `cluster create\|status\|delete` | lifecycle of only the isolated `deployproof` cluster | — |
 
 ## Bootstrap
 
@@ -185,7 +207,7 @@ removes only the `deployproof` cluster.
 
 ## Challenges and resolutions
 
-Defects found while bringing up the first live deployment. Each is covered by a test.
+Defects found while bringing the lab up and hardening its gates. Each is covered by a test.
 
 **PostgreSQL never initialized.** The data volume was mounted with `subPath: pgdata`.
 Kubernetes creates a `subPath` directory as root, so `initdb` running as UID 10001 could
@@ -228,6 +250,11 @@ and Helm prunes the previous one, so completed Jobs do not accumulate.
 
 ## Status
 
-Stages 1 through 4 of [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) are complete. Smoke,
-integration, load, failure-injection, and rollback gates, the GitLab pipeline, and the
-Markdown and JUnit evidence formats are the remaining work.
+Stages 1 through 4 and stage 6 of [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) are complete,
+along with the smoke, integration, and load gates from stage 5. The isolated cluster, live
+certification of all 14 comparisons, the three service gates, and the JSON, Markdown, and
+JUnit evidence are in place and verified against a live cluster.
+
+The remaining work is the failure-injection and rollback drill, a GitLab pipeline that runs
+the same `./scripts/lab.sh` entrypoints as local, and a clean-room teardown proof that leaves
+no DeployProof containers while KubeDrift keeps running.
