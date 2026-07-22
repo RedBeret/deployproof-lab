@@ -69,6 +69,17 @@ def test_deployment_rolls_on_image_digest_change() -> None:
     assert "imageDigest" in application["required"]
 
 
+def test_migration_job_completion_is_durable_not_time_limited() -> None:
+    job = (ROOT / "chart/deployproof/templates/migration-job.yaml").read_text(encoding="utf-8")
+
+    # No finished-TTL, so Kubernetes does not garbage-collect the completed Job and
+    # kubernetes.completed_migration_jobs stays valid for the whole release, not ~10 minutes.
+    assert "ttlSecondsAfterFinished" not in job
+    # The Job is still named per Helm revision, so each deploy creates a fresh one and Helm
+    # prunes the previous, which keeps completed Jobs from accumulating.
+    assert "deployproof-migrate-{{ .Release.Revision }}" in job
+
+
 def test_source_revision_is_baked_into_the_image_not_injected() -> None:
     dockerfile = (ROOT / "app/Dockerfile").read_text(encoding="utf-8")
     deployment = (ROOT / "chart/deployproof/templates/deployment.yaml").read_text(encoding="utf-8")
