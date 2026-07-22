@@ -27,6 +27,7 @@ outside the project boundary and is never reused or modified.
 - a self-cleaning live gate check that drifts real database state, confirms certification rejects it, and restores the state
 - HTTP smoke checks that assert each declared endpoint's status code and body against the contract
 - an integration check that reads the live database directly and confirms the running app reports the same rows
+- a k6 load gate whose latency, error-rate, and check-rate thresholds live in the contract and exit non-zero when breached
 - failure diagnostics collected automatically when a deploy fails
 - unit, cluster, certification, and project-contract tests
 
@@ -130,6 +131,19 @@ contract; integration compares the app against the live database, so it catches 
 caching, misreading, or hashing its own data differently, even when the database itself is
 correct. A change to the database alone does not fail it, because the app reads the same
 database.
+
+## Load gate
+
+```bash
+./scripts/lab.sh load
+```
+
+`load` runs the pinned k6 image against the live release using the `load` section of
+`release/contract.yaml`: it drives the declared path with the declared virtual users and
+duration, and applies the p95 latency, error-rate, and check-rate thresholds. k6 exits
+non-zero when a threshold is breached, so an unacceptable load result fails the gate. The
+observed p95, error rate, and check rate are written to `artifacts/state/load.json`. The k6
+container runs as the host user so it can write that summary into the project.
 
 ## Proving the live gate can fail
 

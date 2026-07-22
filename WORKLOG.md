@@ -192,3 +192,19 @@ Next: add the integration, k6 load, failure-injection, and rollback gates.
   negative fixtures, plus a live integration pass.
 
 Next: add the k6 load, failure-injection, and rollback gates.
+
+## 2026-07-22 - Stage 5, k6 load gate
+
+- Added `deployctl load`, which runs the pinned k6 image against the live release with the
+  path, virtual users, duration, and p95/error-rate/check-rate thresholds declared in the
+  contract's `load` section.
+- Let k6 own the verdict through its exit code, and recorded the observed p95, error rate,
+  and check rate to `artifacts/state/load.json` for evidence.
+- Ran the k6 container as the host user after the first run hit a permission error writing
+  the summary into the project directory as k6's own non-root user.
+- Confirmed live that the release passes the thresholds, and that an impossible p95 threshold
+  makes k6 exit non-zero, which satisfies done-criterion 6.
+- Passed 58 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: prove rollback restores a prior healthy release (done-criterion 7).

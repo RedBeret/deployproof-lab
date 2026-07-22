@@ -26,6 +26,7 @@ from deployproof.config import (
     HELM_IMAGE,
     HOST_PORT,
     IMAGE_DIGEST_FILE,
+    K6_IMAGE,
     KIND_NODE_IMAGE,
     KUBE_CONTEXT,
     KUBECONFIG,
@@ -66,10 +67,16 @@ def docker_tool(
     *,
     check: bool = True,
     host_network: bool = False,
+    env: dict[str, str] | None = None,
+    user: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = ["docker", "run", "--rm"]
     if host_network:
         command.extend(["--network", "host"])
+    if user:
+        command.extend(["--user", user])
+    for name, value in (env or {}).items():
+        command.extend(["--env", f"{name}={value}"])
     command.extend(
         [
             "--volume",
@@ -838,6 +845,81 @@ def integration_live() -> bool:
     return run_integration()["passed"]
 
 
+def summarize_load(summary: dict[str, Any], config: dict[str, Any], passed: bool) -> dict[str, Any]:
+    metrics = summary.get("metrics", {})
+    error_rate = nested(metrics, "http_req_failed", "value")
+    if error_rate is None:
+        error_rate = nested(metrics, "http_req_failed", "rate")
+    check_passes = nested(metrics, "checks", "passes")
+    check_fails = nested(metrics, "checks", "fails")
+    check_rate = None
+    if isinstance(check_passes, (int, float)) and isinstance(check_fails, (int, float)):
+        total = check_passes + check_fails
+        check_rate = check_passes / total if total else None
+    return {
+        "formatVersion": 1,
+        "thresholds": {
+            "maxP95Millis": config["maxP95Millis"],
+            "maxErrorRate": config["maxErrorRate"],
+            "minCheckRate": config["minCheckRate"],
+        },
+        "observed": {
+            "p95Millis": nested(metrics, "http_req_duration", "p(95)"),
+            "errorRate": error_rate,
+            "checkRate": check_rate,
+        },
+        "passed": passed,
+    }
+
+
+def run_load() -> dict[str, Any]:
+    ensure_cluster_identity()
+    wait_for_cluster_ready()
+    config = load_release_contract()["load"]
+    summary_path = ARTIFACTS / "state" / "load-summary.json"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    env = {
+        "BASE_URL": f"http://127.0.0.1:{HOST_PORT}",
+        "TARGET_PATH": config["path"],
+        "VUS": str(config["vus"]),
+        "DURATION": str(config["duration"]),
+        "MAX_ERROR_RATE": str(config["maxErrorRate"]),
+        "MAX_P95_MILLIS": str(config["maxP95Millis"]),
+        "MIN_CHECK_RATE": str(config["minCheckRate"]),
+    }
+    result = docker_tool(
+        K6_IMAGE,
+        ["run", f"--summary-export={project_path(summary_path)}", "load/liveness.js"],
+        env=env,
+        host_network=True,
+        user=f"{os.getuid()}:{os.getgid()}",
+        check=False,
+    )
+    print_process(result)
+    passed = result.returncode == 0
+
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        summary = {}
+    report = summarize_load(summary, config, passed)
+    output = ARTIFACTS / "state" / "load.json"
+    write_atomic(output, f"{json.dumps(report, indent=2, sort_keys=True)}\n")
+
+    outcome = "PASS" if passed else "FAIL"
+    observed = report["observed"]
+    print(
+        f"{outcome} load p95={observed['p95Millis']}ms "
+        f"error_rate={observed['errorRate']} check_rate={observed['checkRate']}"
+    )
+    print(output.relative_to(ROOT))
+    return report
+
+
+def load_live() -> bool:
+    return run_load()["passed"]
+
+
 def collect_live_diagnostics(reason: str) -> Path:
     sections = [f"DeployProof deployment diagnostics\nreason: {reason}\n"]
 
@@ -1036,6 +1118,7 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("certify", help="compare the release contract with live state")
     commands.add_parser("smoke", help="run HTTP correctness checks against the live release")
     commands.add_parser("integration", help="check the running app reflects the live database")
+    commands.add_parser("load", help="run the k6 load gate against the live release")
     commands.add_parser(
         "verify-gate", help="prove the live certification gate rejects drift and recovers"
     )
@@ -1071,6 +1154,8 @@ def main() -> int:
         return 0 if smoke_live() else 1
     if arguments.command == "integration":
         return 0 if integration_live() else 1
+    if arguments.command == "load":
+        return 0 if load_live() else 1
     if arguments.command == "verify-gate":
         return verify_live_gate()
     if arguments.command == "test":
