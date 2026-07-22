@@ -208,3 +208,20 @@ Next: add the k6 load, failure-injection, and rollback gates.
   negative fixtures.
 
 Next: prove rollback restores a prior healthy release (done-criterion 7).
+
+## 2026-07-22 - Stage 6, multi-format evidence
+
+- Added `deployctl evidence`, which runs certification once and writes the same result as
+  `artifacts/evidence/certification.json` (authoritative), `.md` (operator view), and `.xml`
+  (JUnit for CI).
+- Kept the builder and both renderers pure so a unit test proves the three formats agree on
+  outcome and on the passed, failed, and total counts, which is done-criterion 8.
+- Asserted the rendered Markdown and JUnit carry no credential words.
+- Generated the JUnit with the standard library's element tree, which only builds XML and
+  never parses untrusted input; the test checks the XML as text rather than parsing it.
+- Confirmed live that a green release produces `passed 14/14` identically across the three
+  files.
+- Passed 65 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: GitLab pipeline running the same entrypoints, and clean-room acceptance.

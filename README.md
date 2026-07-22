@@ -28,6 +28,7 @@ outside the project boundary and is never reused or modified.
 - HTTP smoke checks that assert each declared endpoint's status code and body against the contract
 - an integration check that reads the live database directly and confirms the running app reports the same rows
 - a k6 load gate whose latency, error-rate, and check-rate thresholds live in the contract and exit non-zero when breached
+- certification evidence written as JSON, Markdown, and JUnit from one result, all agreeing on outcome and counts
 - failure diagnostics collected automatically when a deploy fails
 - unit, cluster, certification, and project-contract tests
 
@@ -144,6 +145,18 @@ duration, and applies the p95 latency, error-rate, and check-rate thresholds. k6
 non-zero when a threshold is breached, so an unacceptable load result fails the gate. The
 observed p95, error rate, and check rate are written to `artifacts/state/load.json`. The k6
 container runs as the host user so it can write that summary into the project.
+
+## Evidence
+
+```bash
+./scripts/lab.sh evidence
+```
+
+`evidence` runs certification once and writes the same result three ways under
+`artifacts/evidence/`: `certification.json` is authoritative, `certification.md` is the
+operator view, and `certification.xml` is a JUnit report for CI. All three carry the same
+outcome and the same passed, failed, and total counts, and none contain credential values.
+The command exits non-zero when certification fails.
 
 ## Proving the live gate can fail
 
