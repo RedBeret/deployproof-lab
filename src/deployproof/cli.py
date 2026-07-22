@@ -23,6 +23,7 @@ from deployproof.config import (
     FIXTURES,
     HELM_IMAGE,
     HOST_PORT,
+    IMAGE_DIGEST_FILE,
     KIND_NODE_IMAGE,
     KUBE_CONTEXT,
     KUBECONFIG,
@@ -117,7 +118,33 @@ def git_revision() -> str:
     return run(["git", "rev-parse", "HEAD"], capture=True).stdout.strip()
 
 
-def live_release_overrides() -> list[str]:
+def image_digest(image: str) -> str:
+    return run(["docker", "inspect", "--format", "{{.Id}}", image], capture=True).stdout.strip()
+
+
+def record_image_digest(image: str) -> str:
+    digest = image_digest(image)
+    if not digest.startswith("sha256:"):
+        raise RuntimeError(f"unexpected image digest for {image!r}: {digest!r}")
+    write_atomic(IMAGE_DIGEST_FILE, f"{digest}\n")
+    return digest
+
+
+def normalize_image_id(image_id: str | None) -> str | None:
+    if not image_id:
+        return None
+    return image_id.rsplit("@", 1)[-1]
+
+
+def running_api_image_id(observations: dict[str, Any]) -> str | None:
+    for pod in nested(observations, "pods", "items") or []:
+        for status in nested(pod, "status", "containerStatuses") or []:
+            if status.get("name") == "api":
+                return normalize_image_id(status.get("imageID"))
+    return None
+
+
+def live_release_overrides(image_digest_value: str) -> list[str]:
     return [
         "--set-string",
         f"image.tag={APP_VERSION}",
@@ -125,10 +152,12 @@ def live_release_overrides() -> list[str]:
         "image.pullPolicy=Never",
         "--set-string",
         f"application.sourceRevision={git_revision()}",
+        "--set-string",
+        f"application.imageDigest={image_digest_value}",
     ]
 
 
-def helm_render_live() -> Path:
+def helm_render_live(image_digest_value: str) -> Path:
     result = docker_tool(
         HELM_IMAGE,
         [
@@ -137,7 +166,7 @@ def helm_render_live() -> Path:
             "chart/deployproof",
             "--namespace",
             NAMESPACE,
-            *live_release_overrides(),
+            *live_release_overrides(image_digest_value),
         ],
     )
     output = ARTIFACTS / "rendered" / "live-release.yaml"
@@ -439,7 +468,10 @@ def nested(value: Any, *keys: str) -> Any:
 
 
 def certification_checks(
-    contract: dict[str, Any], observations: dict[str, Any], source_revision: str
+    contract: dict[str, Any],
+    observations: dict[str, Any],
+    source_revision: str,
+    expected_image_digest: str | None = None,
 ) -> list[dict[str, Any]]:
     checks: list[dict[str, Any]] = []
 
@@ -488,6 +520,13 @@ def certification_checks(
     )
     add("release.source_revision", resolved_revision, release.get("source_revision"))
     add("kubernetes.deployment_image", expected_release["image"], deployment_image)
+    observed_image_digest = running_api_image_id(observations)
+    add(
+        "kubernetes.image_digest",
+        expected_image_digest,
+        observed_image_digest,
+        passed=bool(expected_image_digest) and expected_image_digest == observed_image_digest,
+    )
     add("configuration.values", normalized_config, release.get("configuration"))
     add(
         "configuration.sha256",
@@ -537,6 +576,13 @@ def fetch_release_info() -> dict[str, Any]:
         return json.load(response)
 
 
+def recorded_image_digest() -> str | None:
+    if not IMAGE_DIGEST_FILE.is_file():
+        return None
+    digest = IMAGE_DIGEST_FILE.read_text(encoding="utf-8").strip()
+    return digest or None
+
+
 def certify_live() -> bool:
     ensure_cluster_identity()
     wait_for_cluster_ready()
@@ -554,8 +600,11 @@ def certify_live() -> bool:
                 "app.kubernetes.io/component=migration",
             ]
         ),
+        "pods": kubectl_json(["get", "pods", "--selector", "app.kubernetes.io/component=api"]),
     }
-    checks = certification_checks(load_release_contract(), observations, revision)
+    checks = certification_checks(
+        load_release_contract(), observations, revision, recorded_image_digest()
+    )
     passed = all(check["passed"] for check in checks)
     report = {
         "formatVersion": 1,
@@ -635,9 +684,11 @@ def deploy_live() -> None:
             CLUSTER_NAME,
         ]
     )
+    digest = record_image_digest(image)
+    print(f"ok recorded image digest {digest}")
     apply_namespace_and_secret()
 
-    rendered = helm_render_live()
+    rendered = helm_render_live(digest)
     require_result(kubeconform(rendered), "live Kubernetes schema", should_pass=True)
     require_result(kyverno(rendered), "live workload policies", should_pass=True)
     dry_run = kubectl(
@@ -670,7 +721,7 @@ def deploy_live() -> None:
             "--wait-for-jobs",
             "--timeout",
             ROLLOUT_TIMEOUT,
-            *live_release_overrides(),
+            *live_release_overrides(digest),
         ],
         check=False,
     )

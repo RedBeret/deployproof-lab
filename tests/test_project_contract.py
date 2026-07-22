@@ -60,6 +60,15 @@ def test_external_images_are_digest_pinned() -> None:
     assert "@sha256:" in values["postgresql"]["image"]
 
 
+def test_deployment_rolls_on_image_digest_change() -> None:
+    deployment = (ROOT / "chart/deployproof/templates/deployment.yaml").read_text(encoding="utf-8")
+    schema = json.loads((ROOT / "chart/deployproof/values.schema.json").read_text(encoding="utf-8"))
+    application = schema["properties"]["application"]
+
+    assert "deployproof.dev/image-digest: {{ .Values.application.imageDigest" in deployment
+    assert "imageDigest" in application["required"]
+
+
 def test_postgresql_owns_its_data_directory() -> None:
     statefulset = (ROOT / "chart/deployproof/templates/postgresql-statefulset.yaml").read_text(
         encoding="utf-8"

@@ -91,3 +91,19 @@ release contract with live Kubernetes, application, configuration, and database 
   negative fixtures.
 
 Next: add smoke, integration, k6 load, failure-injection, and rollback gates.
+
+## 2026-07-22 - Image digest certification
+
+- Recorded the digest of the image loaded into the node and compared it against the digest
+  the running container reports, so the release is certified by content instead of the
+  mutable `deployproof-api:0.1.0` tag.
+- Stamped the loaded digest onto the pod template so a rebuild under the same tag rolls the
+  pod; a content change no longer leaves the previous container in place.
+- Added the fourteenth comparison, `kubernetes.image_digest`, which fails when the digest is
+  missing on either side rather than treating two absent readings as equal.
+- Confirmed with a live cluster that a stale running container fails `kubernetes.image_digest`
+  while `kubernetes.deployment_image` still passes, then that a clean redeploy passes all 14.
+- Passed 36 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: bake the source revision into the image so it cannot be injected at deploy time.

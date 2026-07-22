@@ -8,6 +8,8 @@ import yaml
 from deployproof import cli
 from deployproof.config import RELEASE_CONTRACT
 
+IMAGE_DIGEST = "sha256:" + "a" * 64
+
 
 def contract() -> dict[str, Any]:
     return yaml.safe_load(RELEASE_CONTRACT.read_text(encoding="utf-8"))
@@ -45,18 +47,21 @@ def healthy_observations() -> dict[str, Any]:
             }
         },
         "jobs": {"items": [{"status": {"succeeded": 1}}]},
+        "pods": {
+            "items": [{"status": {"containerStatuses": [{"name": "api", "imageID": IMAGE_DIGEST}]}}]
+        },
     }
 
 
 def failed_check_names(observations: dict[str, Any]) -> list[str]:
-    checks = cli.certification_checks(contract(), observations, "abc123")
+    checks = cli.certification_checks(contract(), observations, "abc123", IMAGE_DIGEST)
     return [check["name"] for check in checks if not check["passed"]]
 
 
 def test_matching_live_state_passes_every_comparison() -> None:
-    checks = cli.certification_checks(contract(), healthy_observations(), "abc123")
+    checks = cli.certification_checks(contract(), healthy_observations(), "abc123", IMAGE_DIGEST)
 
-    assert len(checks) == 13
+    assert len(checks) == 14
     assert all(check["passed"] for check in checks)
 
 
@@ -82,6 +87,37 @@ def test_unexpected_image_fails_certification() -> None:
     assert failed_check_names(observations) == ["kubernetes.deployment_image"]
 
 
+def test_stale_running_image_fails_on_digest() -> None:
+    observations = healthy_observations()
+    running = observations["pods"]["items"][0]["status"]["containerStatuses"][0]
+    running["imageID"] = "sha256:" + "b" * 64
+
+    assert failed_check_names(observations) == ["kubernetes.image_digest"]
+
+
+def test_missing_running_pod_fails_on_digest() -> None:
+    observations = healthy_observations()
+    observations["pods"] = {"items": []}
+
+    assert failed_check_names(observations) == ["kubernetes.image_digest"]
+
+
+def test_unrecorded_expected_digest_fails_even_when_running_matches() -> None:
+    checks = cli.certification_checks(contract(), healthy_observations(), "abc123", None)
+    digest = next(check for check in checks if check["name"] == "kubernetes.image_digest")
+
+    assert digest["expected"] is None
+    assert not digest["passed"]
+
+
+def test_running_image_id_strips_repository_prefix() -> None:
+    prefixed = f"docker.io/library/deployproof-api@{IMAGE_DIGEST}"
+
+    assert cli.normalize_image_id(prefixed) == IMAGE_DIGEST
+    assert cli.normalize_image_id(IMAGE_DIGEST) == IMAGE_DIGEST
+    assert cli.normalize_image_id(None) is None
+
+
 def test_unfinished_migration_fails_certification() -> None:
     observations = healthy_observations()
     observations["jobs"] = {"items": [{"status": {}}]}
@@ -99,7 +135,7 @@ def test_unavailable_api_replica_fails_certification() -> None:
 def test_missing_observations_are_failures_not_implicit_passes() -> None:
     checks = cli.certification_checks(contract(), {}, "abc123")
 
-    assert len(checks) == 13
+    assert len(checks) == 14
     assert not any(check["passed"] for check in checks)
 
 
