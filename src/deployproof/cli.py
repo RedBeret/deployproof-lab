@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -760,6 +761,83 @@ def verify_live_gate() -> int:
     return 0
 
 
+def canonical_data_hash(items: list[dict[str, Any]]) -> str:
+    normalized = [
+        {
+            "name": item["name"],
+            "quantity": item["quantity"],
+            "sku": item["sku"],
+            "warehouse": item["warehouse"],
+        }
+        for item in items
+    ]
+    encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def read_database_facts() -> dict[str, Any]:
+    rows = postgres_sql(
+        "SELECT row_to_json(t) FROM "
+        "(SELECT sku, name, quantity, warehouse FROM inventory_items ORDER BY sku) t;"
+    )
+    items = [json.loads(line) for line in rows.splitlines() if line.strip()]
+    version = postgres_sql("SELECT max(version) FROM schema_migrations;") or None
+    return {
+        "row_count": len(items),
+        "migration_version": version,
+        "data_sha256": canonical_data_hash(items),
+    }
+
+
+def evaluate_integration(
+    app_report: dict[str, Any], db_facts: dict[str, Any]
+) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+
+    def add(name: str, expected: Any, observed: Any) -> None:
+        checks.append(
+            {
+                "name": name,
+                "expected": expected,
+                "observed": observed,
+                "passed": expected == observed,
+            }
+        )
+
+    add(
+        "integration.row_count",
+        db_facts["row_count"],
+        nested(app_report, "row_counts", "inventory_items"),
+    )
+    add(
+        "integration.migration_version",
+        db_facts["migration_version"],
+        app_report.get("migration_version"),
+    )
+    add("integration.data_sha256", db_facts["data_sha256"], app_report.get("data_sha256"))
+    return checks
+
+
+def run_integration() -> dict[str, Any]:
+    ensure_cluster_identity()
+    wait_for_cluster_ready()
+    checks = evaluate_integration(fetch_release_info(), read_database_facts())
+    passed = all(check["passed"] for check in checks)
+    report = {"formatVersion": 1, "checks": checks, "passed": passed}
+    output = ARTIFACTS / "state" / "integration.json"
+    write_atomic(output, f"{json.dumps(report, indent=2, sort_keys=True)}\n")
+
+    for check in checks:
+        outcome = "PASS" if check["passed"] else "FAIL"
+        print(f"{outcome} {check['name']}")
+    print(output.relative_to(ROOT))
+    return report
+
+
+def integration_live() -> bool:
+    return run_integration()["passed"]
+
+
 def collect_live_diagnostics(reason: str) -> Path:
     sections = [f"DeployProof deployment diagnostics\nreason: {reason}\n"]
 
@@ -957,6 +1035,7 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("deploy", help="deploy and certify the release in the isolated cluster")
     commands.add_parser("certify", help="compare the release contract with live state")
     commands.add_parser("smoke", help="run HTTP correctness checks against the live release")
+    commands.add_parser("integration", help="check the running app reflects the live database")
     commands.add_parser(
         "verify-gate", help="prove the live certification gate rejects drift and recovers"
     )
@@ -990,6 +1069,8 @@ def main() -> int:
         return 0 if certify_live() else 1
     if arguments.command == "smoke":
         return 0 if smoke_live() else 1
+    if arguments.command == "integration":
+        return 0 if integration_live() else 1
     if arguments.command == "verify-gate":
         return verify_live_gate()
     if arguments.command == "test":

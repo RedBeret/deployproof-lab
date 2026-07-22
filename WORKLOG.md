@@ -177,3 +177,18 @@ Next: add smoke, integration, k6 load, failure-injection, and rollback gates.
   negative fixtures.
 
 Next: add the integration, k6 load, failure-injection, and rollback gates.
+
+## 2026-07-22 - Stage 5, integration gate
+
+- Added `deployctl integration`, which reads the inventory table straight from PostgreSQL,
+  recomputes the row count, migration version, and canonical data hash the same way the app
+  does, and confirms the running app reports the same values through `/release-info`.
+- Pinned the recomputed hash against the contract's `dataSha256` in a unit test so the two
+  canonicalizations cannot drift apart unnoticed.
+- Confirmed this is distinct from certification: it compares the app against the live
+  database rather than the contract, so it catches the app caching or misreporting its data,
+  and a database change alone does not fail it because the app reads the same database.
+- Passed 52 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures, plus a live integration pass.
+
+Next: add the k6 load, failure-injection, and rollback gates.
