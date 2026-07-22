@@ -38,8 +38,6 @@ spec:
           env:
             - name: APP_VERSION
               value: {{ .Values.application.version | quote }}
-            - name: SOURCE_REVISION
-              value: {{ .Values.application.sourceRevision | quote }}
             - name: PGHOST
               value: deployproof-postgresql
             - name: PGPORT

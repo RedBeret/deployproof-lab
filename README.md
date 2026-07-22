@@ -22,6 +22,7 @@ outside the project boundary and is never reused or modified.
 - isolated cluster lifecycle with a three-part identity check before any destructive action
 - live deployment with a bounded, ordered rollout
 - image digest recorded when the image is loaded, so the running container is certified by content and not by its mutable tag
+- source revision baked into the image at build time, so a stale image reports the revision it was built from rather than one supplied at deploy
 - 14 declared-versus-observed release comparisons written to a JSON report
 - failure diagnostics collected automatically when a deploy fails
 - unit, cluster, certification, and project-contract tests
@@ -88,6 +89,12 @@ is mutable. `deploy` records the digest of the image it loads into the node to
 compares it against the digest the running container actually reports. The stamp also
 means a rebuilt image under the same tag rolls the pod instead of leaving the old one in
 place, so the certified digest is the one serving traffic.
+
+The source revision is baked into the image as a build argument, so the running container
+reports the commit it was built from. Certification compares that against the current
+`git rev-parse HEAD`, so an image built from an older commit fails `release.source_revision`
+even though its tag is unchanged. The revision is no longer set as a deployment environment
+variable, which would have reported whatever the deploy supplied regardless of the image.
 
 When a deploy fails, Helm status, cluster resources, events, and each pod's description
 and logs are written to `artifacts/state/deploy-diagnostics.txt`.

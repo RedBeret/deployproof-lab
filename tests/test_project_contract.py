@@ -69,6 +69,18 @@ def test_deployment_rolls_on_image_digest_change() -> None:
     assert "imageDigest" in application["required"]
 
 
+def test_source_revision_is_baked_into_the_image_not_injected() -> None:
+    dockerfile = (ROOT / "app/Dockerfile").read_text(encoding="utf-8")
+    deployment = (ROOT / "chart/deployproof/templates/deployment.yaml").read_text(encoding="utf-8")
+    schema = json.loads((ROOT / "chart/deployproof/values.schema.json").read_text(encoding="utf-8"))
+    application = schema["properties"]["application"]
+
+    assert "ARG SOURCE_REVISION" in dockerfile
+    assert "ENV SOURCE_REVISION=${SOURCE_REVISION}" in dockerfile
+    assert "SOURCE_REVISION" not in deployment
+    assert "sourceRevision" not in application["properties"]
+
+
 def test_postgresql_owns_its_data_directory() -> None:
     statefulset = (ROOT / "chart/deployproof/templates/postgresql-statefulset.yaml").read_text(
         encoding="utf-8"
