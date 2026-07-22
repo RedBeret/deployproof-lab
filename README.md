@@ -25,6 +25,7 @@ outside the project boundary and is never reused or modified.
 - source revision baked into the image at build time, so a stale image reports the revision it was built from rather than one supplied at deploy
 - 14 declared-versus-observed release comparisons written to a JSON report
 - a self-cleaning live gate check that drifts real database state, confirms certification rejects it, and restores the state
+- HTTP smoke checks that assert each declared endpoint's status code and body against the contract
 - failure diagnostics collected automatically when a deploy fails
 - unit, cluster, certification, and project-contract tests
 
@@ -99,6 +100,18 @@ variable, which would have reported whatever the deploy supplied regardless of t
 
 When a deploy fails, Helm status, cluster resources, events, and each pod's description
 and logs are written to `artifacts/state/deploy-diagnostics.txt`.
+
+## Smoke checks
+
+```bash
+./scripts/lab.sh smoke
+```
+
+`smoke` reads the `smoke` list in `release/contract.yaml`, requests each declared path, and
+checks the HTTP status and the named body fields against what the release should return. It
+writes `artifacts/state/smoke.json` and exits non-zero if any endpoint is missing, degraded,
+or returns the wrong body, so a release whose Pods are up but whose API answers incorrectly
+does not pass.
 
 ## Proving the live gate can fail
 

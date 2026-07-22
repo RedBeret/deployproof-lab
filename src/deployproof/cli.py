@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 import yaml
@@ -584,6 +585,66 @@ def fetch_release_info() -> dict[str, Any]:
         return json.load(response)
 
 
+def http_get(path: str) -> tuple[int | None, Any]:
+    url = f"http://127.0.0.1:{HOST_PORT}{path}"
+    try:
+        with urlopen(url, timeout=5) as response:
+            return response.status, json.load(response)
+    except HTTPError as error:
+        try:
+            return error.code, json.load(error)
+        except (ValueError, json.JSONDecodeError):
+            return error.code, None
+    except URLError:
+        return None, None
+
+
+def evaluate_smoke(
+    specs: list[dict[str, Any]], responses: dict[str, tuple[int | None, Any]]
+) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    for spec in specs:
+        path = spec["path"]
+        expect = spec.get("expect", {})
+        status, body = responses.get(path, (None, None))
+        body_fields = body if isinstance(body, dict) else {}
+        observed_body = {key: body_fields.get(key) for key in expect}
+        passed = status == spec["status"] and all(
+            body_fields.get(key) == value for key, value in expect.items()
+        )
+        checks.append(
+            {
+                "name": f"smoke {path}",
+                "expected": {"status": spec["status"], "body": expect},
+                "observed": {"status": status, "body": observed_body},
+                "passed": passed,
+            }
+        )
+    return checks
+
+
+def run_smoke() -> dict[str, Any]:
+    ensure_cluster_identity()
+    wait_for_cluster_ready()
+    specs = load_release_contract().get("smoke", [])
+    responses = {spec["path"]: http_get(spec["path"]) for spec in specs}
+    checks = evaluate_smoke(specs, responses)
+    passed = all(check["passed"] for check in checks)
+    report = {"formatVersion": 1, "checks": checks, "passed": passed}
+    output = ARTIFACTS / "state" / "smoke.json"
+    write_atomic(output, f"{json.dumps(report, indent=2, sort_keys=True)}\n")
+
+    for check in checks:
+        outcome = "PASS" if check["passed"] else "FAIL"
+        print(f"{outcome} {check['name']}")
+    print(output.relative_to(ROOT))
+    return report
+
+
+def smoke_live() -> bool:
+    return run_smoke()["passed"]
+
+
 def recorded_image_digest() -> str | None:
     if not IMAGE_DIGEST_FILE.is_file():
         return None
@@ -895,6 +956,7 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("validate", help="run static manifest and policy gates")
     commands.add_parser("deploy", help="deploy and certify the release in the isolated cluster")
     commands.add_parser("certify", help="compare the release contract with live state")
+    commands.add_parser("smoke", help="run HTTP correctness checks against the live release")
     commands.add_parser(
         "verify-gate", help="prove the live certification gate rejects drift and recovers"
     )
@@ -926,6 +988,8 @@ def main() -> int:
         return 0
     if arguments.command == "certify":
         return 0 if certify_live() else 1
+    if arguments.command == "smoke":
+        return 0 if smoke_live() else 1
     if arguments.command == "verify-gate":
         return verify_live_gate()
     if arguments.command == "test":
