@@ -19,3 +19,21 @@ expected:
   databaseReplicas: 1
   completedMigrationJobs: 1
 rolloutTimeout: 180s
+smoke:
+  - path: /
+    status: 200
+    expect:
+      application: deployproof-inventory
+      project: DeployProof Lab
+  - path: /live
+    status: 200
+    expect:
+      status: alive
+  - path: /health
+    status: 200
+    expect:
+      status: healthy
+  - path: /release-info
+    status: 200
+    expect:
+      application: deployproof-inventory

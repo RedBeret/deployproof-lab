@@ -160,3 +160,20 @@ Next: add smoke, integration, k6 load, failure-injection, and rollback gates.
   negative fixtures.
 
 Next: add smoke, integration, k6 load, failure-injection, and rollback gates.
+
+## 2026-07-22 - Stage 5, smoke gate
+
+- Added `deployctl smoke`, which reads a `smoke` list from the release contract, requests each
+  declared endpoint, and checks the HTTP status and named body fields against the release.
+- Declared the four current endpoints in the contract: `/`, `/live`, `/health`, and
+  `/release-info`.
+- Kept the check evaluation pure so it is unit tested against crafted responses, including a
+  degraded health endpoint, a wrong body field, and an unreachable endpoint.
+- Fixed a key collision found while testing: a body field named `status` would have clobbered
+  the HTTP status in the recorded expected and observed values; the body is now nested.
+- Confirmed live that smoke passes against the release and exits non-zero when an expectation
+  is wrong.
+- Passed 46 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: add the integration, k6 load, failure-injection, and rollback gates.
