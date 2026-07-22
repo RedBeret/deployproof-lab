@@ -145,3 +145,18 @@ Next: add smoke, integration, k6 load, failure-injection, and rollback gates.
   static negative fixtures, and the live gate end to end.
 
 Next: add smoke, integration, k6 load, failure-injection, and rollback gates.
+
+## 2026-07-22 - Durable migration completion check
+
+- Removed `ttlSecondsAfterFinished` from the migration Job so Kubernetes stops garbage-
+  collecting the completed Job; `kubernetes.completed_migration_jobs` was failing about ten
+  minutes after each deploy once the Job was gone.
+- Confirmed live that the completed Job now has no TTL and that a second deploy prunes the
+  previous revision's Job, so exactly one migration Job remains and completed Jobs do not
+  accumulate.
+- Certification is no longer time-limited: `certify` and `verify-gate` pass on a release that
+  is well past the old ten-minute window.
+- Passed 40 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: add smoke, integration, k6 load, failure-injection, and rollback gates.

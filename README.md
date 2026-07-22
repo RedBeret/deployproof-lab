@@ -161,6 +161,13 @@ new problem. Check `helm status` and `helm history` before retrying.
 flag the pinned Helm version rejects, so a failed deploy was reported without the
 evidence needed to diagnose it.
 
+**Certification expired about ten minutes after a deploy.** The migration Job set
+`ttlSecondsAfterFinished`, so Kubernetes garbage-collected the completed Job and
+`kubernetes.completed_migration_jobs` then counted zero and failed, even though the
+migration had run. The Job no longer sets a finished TTL, so it survives for the life of
+the release; because it is still named per Helm revision, each deploy creates a fresh Job
+and Helm prunes the previous one, so completed Jobs do not accumulate.
+
 ## Status
 
 Stages 1 through 4 of [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) are complete. Smoke,
