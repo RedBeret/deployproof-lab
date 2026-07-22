@@ -37,3 +37,10 @@ smoke:
     status: 200
     expect:
       application: deployproof-inventory
+load:
+  path: /live
+  vus: 5
+  duration: 10s
+  maxErrorRate: 0.01
+  maxP95Millis: 250
+  minCheckRate: 0.99
