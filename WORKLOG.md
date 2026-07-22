@@ -107,3 +107,19 @@ Next: add smoke, integration, k6 load, failure-injection, and rollback gates.
   negative fixtures.
 
 Next: bake the source revision into the image so it cannot be injected at deploy time.
+
+## 2026-07-22 - Baked source revision
+
+- Passed the current commit to `docker build` as a `SOURCE_REVISION` build argument and set
+  it as an image environment variable, so the running container reports the commit it was
+  built from.
+- Removed the deployment's `SOURCE_REVISION` environment variable and the
+  `application.sourceRevision` chart value, so the revision can no longer be supplied at
+  deploy time independent of the image.
+- Confirmed with a live cluster that advancing HEAD without rebuilding fails
+  `release.source_revision` while the image digest still matches, then that a redeploy from
+  the new HEAD passes all 14 comparisons.
+- Passed 37 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: add smoke, integration, k6 load, failure-injection, and rollback gates.

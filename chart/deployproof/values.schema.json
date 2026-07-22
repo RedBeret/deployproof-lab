@@ -24,10 +24,9 @@
     "application": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["version", "sourceRevision", "imageDigest"],
+      "required": ["version", "imageDigest"],
       "properties": {
         "version": {"type": "string", "minLength": 1},
-        "sourceRevision": {"type": "string", "minLength": 1},
         "imageDigest": {"type": "string", "minLength": 1}
       }
     },

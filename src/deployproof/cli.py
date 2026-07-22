@@ -151,8 +151,6 @@ def live_release_overrides(image_digest_value: str) -> list[str]:
         "--set-string",
         "image.pullPolicy=Never",
         "--set-string",
-        f"application.sourceRevision={git_revision()}",
-        "--set-string",
         f"application.imageDigest={image_digest_value}",
     ]
 
@@ -295,7 +293,17 @@ def validate_static() -> None:
 
 def build_image() -> str:
     image = f"{APP_IMAGE_REPOSITORY}:{APP_VERSION}"
-    run(["docker", "build", "--tag", image, "app"])
+    run(
+        [
+            "docker",
+            "build",
+            "--build-arg",
+            f"SOURCE_REVISION={git_revision()}",
+            "--tag",
+            image,
+            "app",
+        ]
+    )
     print(image)
     return image
 

@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 COPY deployproof_api ./deployproof_api
 
+ARG SOURCE_REVISION=unknown
+ENV SOURCE_REVISION=${SOURCE_REVISION}
+
 USER 10001:10001
 EXPOSE 8080
 
