@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -920,6 +922,99 @@ def load_live() -> bool:
     return run_load()["passed"]
 
 
+def _render_value(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def build_evidence(checks: list[dict[str, Any]], generated_at: str) -> dict[str, Any]:
+    passed = sum(1 for check in checks if check["passed"])
+    total = len(checks)
+    return {
+        "formatVersion": 1,
+        "generatedAt": generated_at,
+        "outcome": "passed" if passed == total else "failed",
+        "counts": {"total": total, "passed": passed, "failed": total - passed},
+        "checks": checks,
+    }
+
+
+def render_markdown(evidence: dict[str, Any]) -> str:
+    counts = evidence["counts"]
+    lines = [
+        "# DeployProof certification",
+        "",
+        f"- Generated: {evidence['generatedAt']}",
+        f"- Outcome: {evidence['outcome']}",
+        f"- Checks: {counts['passed']} passed, {counts['failed']} failed, {counts['total']} total",
+        "",
+        "| Check | Expected | Observed | Result |",
+        "| --- | --- | --- | --- |",
+    ]
+    for check in evidence["checks"]:
+        result = "PASS" if check["passed"] else "FAIL"
+        lines.append(
+            f"| {check['name']} | {_render_value(check['expected'])} "
+            f"| {_render_value(check['observed'])} | {result} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def render_junit(evidence: dict[str, Any]) -> str:
+    counts = evidence["counts"]
+    suite = ET.Element(
+        "testsuite",
+        {
+            "name": "deployproof-certification",
+            "tests": str(counts["total"]),
+            "failures": str(counts["failed"]),
+            "timestamp": evidence["generatedAt"],
+        },
+    )
+    for check in evidence["checks"]:
+        case = ET.SubElement(
+            suite,
+            "testcase",
+            {"name": check["name"], "classname": "deployproof.certification"},
+        )
+        if not check["passed"]:
+            message = (
+                f"expected {_render_value(check['expected'])} "
+                f"observed {_render_value(check['observed'])}"
+            )
+            failure = ET.SubElement(case, "failure", {"message": message})
+            failure.text = message
+    return ET.tostring(suite, encoding="unicode") + "\n"
+
+
+def run_evidence() -> dict[str, Any]:
+    report = run_live_certification()
+    generated_at = datetime.now(UTC).isoformat()
+    evidence = build_evidence(report["checks"], generated_at)
+
+    directory = ARTIFACTS / "evidence"
+    write_atomic(
+        directory / "certification.json",
+        f"{json.dumps(evidence, indent=2, sort_keys=True)}\n",
+    )
+    write_atomic(directory / "certification.md", render_markdown(evidence))
+    write_atomic(directory / "certification.xml", render_junit(evidence))
+
+    counts = evidence["counts"]
+    print(
+        f"evidence {evidence['outcome']}: "
+        f"{counts['passed']}/{counts['total']} checks in three formats"
+    )
+    for name in ("certification.json", "certification.md", "certification.xml"):
+        print((directory / name).relative_to(ROOT))
+    return evidence
+
+
+def evidence_live() -> bool:
+    return run_evidence()["outcome"] == "passed"
+
+
 def collect_live_diagnostics(reason: str) -> Path:
     sections = [f"DeployProof deployment diagnostics\nreason: {reason}\n"]
 
@@ -1120,6 +1215,9 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("integration", help="check the running app reflects the live database")
     commands.add_parser("load", help="run the k6 load gate against the live release")
     commands.add_parser(
+        "evidence", help="write certification as JSON, Markdown, and JUnit evidence"
+    )
+    commands.add_parser(
         "verify-gate", help="prove the live certification gate rejects drift and recovers"
     )
     commands.add_parser("test", help="run local validation")
@@ -1156,6 +1254,8 @@ def main() -> int:
         return 0 if integration_live() else 1
     if arguments.command == "load":
         return 0 if load_live() else 1
+    if arguments.command == "evidence":
+        return 0 if evidence_live() else 1
     if arguments.command == "verify-gate":
         return verify_live_gate()
     if arguments.command == "test":
