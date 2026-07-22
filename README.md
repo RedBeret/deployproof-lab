@@ -42,8 +42,8 @@ isolated cluster context.
 
 | Command | What it proves | Evidence |
 | --- | --- | --- |
-| `doctor` | the local operator environment is ready | — |
-| `test` | unit and contract tests and the static gate pass | — |
+| `doctor` | the local operator environment is ready | none |
+| `test` | unit and contract tests and the static gate pass | none |
 | `validate` | the chart passes schema and policy, and the validators reject bad fixtures | `artifacts/rendered/` |
 | `deploy` | the release installs and then certifies against the contract | `artifacts/state/live-certification.json` |
 | `certify` | the declared contract matches live Kubernetes, app, and database state | `artifacts/state/live-certification.json` |
@@ -51,8 +51,8 @@ isolated cluster context.
 | `integration` | the running app faithfully reflects its live database | `artifacts/state/integration.json` |
 | `load` | the release meets the contract's latency, error, and check thresholds under load | `artifacts/state/load.json` |
 | `evidence` | one certification result as agreeing JSON, Markdown, and JUnit | `artifacts/evidence/` |
-| `verify-gate` | the live certification gate rejects drift and self-recovers | — |
-| `cluster create\|status\|delete` | lifecycle of only the isolated `deployproof` cluster | — |
+| `verify-gate` | the live certification gate rejects drift and self-recovers | none |
+| `cluster create\|status\|delete` | lifecycle of only the isolated `deployproof` cluster | none |
 
 ## Bootstrap
 
