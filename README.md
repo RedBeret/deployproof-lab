@@ -26,6 +26,7 @@ outside the project boundary and is never reused or modified.
 - 14 declared-versus-observed release comparisons written to a JSON report
 - a self-cleaning live gate check that drifts real database state, confirms certification rejects it, and restores the state
 - HTTP smoke checks that assert each declared endpoint's status code and body against the contract
+- an integration check that reads the live database directly and confirms the running app reports the same rows
 - failure diagnostics collected automatically when a deploy fails
 - unit, cluster, certification, and project-contract tests
 
@@ -112,6 +113,23 @@ checks the HTTP status and the named body fields against what the release should
 writes `artifacts/state/smoke.json` and exits non-zero if any endpoint is missing, degraded,
 or returns the wrong body, so a release whose Pods are up but whose API answers incorrectly
 does not pass.
+
+## Integration check
+
+```bash
+./scripts/lab.sh integration
+```
+
+`integration` reads the inventory table straight from PostgreSQL, recomputes the row count,
+migration version, and canonical data hash the same way the application does, and confirms
+the running app reports the same values through `/release-info`. It writes
+`artifacts/state/integration.json`.
+
+This is distinct from certification. Certification compares the app against the declared
+contract; integration compares the app against the live database, so it catches the app
+caching, misreading, or hashing its own data differently, even when the database itself is
+correct. A change to the database alone does not fail it, because the app reads the same
+database.
 
 ## Proving the live gate can fail
 
