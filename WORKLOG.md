@@ -123,3 +123,25 @@ Next: bake the source revision into the image so it cannot be injected at deploy
   negative fixtures.
 
 Next: add smoke, integration, k6 load, failure-injection, and rollback gates.
+
+## 2026-07-22 - Live negative gate fixture
+
+- Added `deployctl verify-gate`, the live counterpart to the static negative fixtures: it
+  certifies the baseline, inserts a probe row into `inventory_items`, and confirms the drift
+  fails exactly `database.row_counts` and `database.data_sha256`, then removes the row and
+  confirms the gate returns to green.
+- Chose a database row for the drift because it is real observed state, restores exactly on
+  delete, and touches no Kubernetes resource, so it cannot split field ownership the way an
+  out-of-band `kubectl patch` did in an earlier session.
+- Removed the probe row before the baseline as well, so an interrupted run leaves nothing
+  behind.
+- Split certification into gathering observations and running the report so the gate can read
+  the failing check names without shelling out again.
+- Found that `kubernetes.completed_migration_jobs` depends on the migration Job, which has a
+  600 second TTL, so certification is only valid for about ten minutes after a deploy. Left
+  for a separate change; the durable `database.migration_version` already proves the same
+  fact.
+- Passed 39 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  static negative fixtures, and the live gate end to end.
+
+Next: add smoke, integration, k6 load, failure-injection, and rollback gates.

@@ -591,11 +591,8 @@ def recorded_image_digest() -> str | None:
     return digest or None
 
 
-def certify_live() -> bool:
-    ensure_cluster_identity()
-    wait_for_cluster_ready()
-    revision = git_revision()
-    observations = {
+def gather_live_observations() -> dict[str, Any]:
+    return {
         "release": fetch_release_info(),
         "deployment": kubectl_json(["get", "deployment", "deployproof-api"]),
         "statefulset": kubectl_json(["get", "statefulset", "deployproof-postgresql"]),
@@ -610,8 +607,14 @@ def certify_live() -> bool:
         ),
         "pods": kubectl_json(["get", "pods", "--selector", "app.kubernetes.io/component=api"]),
     }
+
+
+def run_live_certification() -> dict[str, Any]:
+    ensure_cluster_identity()
+    wait_for_cluster_ready()
+    revision = git_revision()
     checks = certification_checks(
-        load_release_contract(), observations, revision, recorded_image_digest()
+        load_release_contract(), gather_live_observations(), revision, recorded_image_digest()
     )
     passed = all(check["passed"] for check in checks)
     report = {
@@ -627,7 +630,73 @@ def certify_live() -> bool:
         outcome = "PASS" if check["passed"] else "FAIL"
         print(f"{outcome} {check['name']}")
     print(output.relative_to(ROOT))
-    return passed
+    return report
+
+
+def certify_live() -> bool:
+    return run_live_certification()["passed"]
+
+
+GATE_PROBE_SKU = "GATE-PROBE"
+GATE_DRIFT_FAILURES = {"database.row_counts", "database.data_sha256"}
+
+
+def postgres_sql(statement: str) -> str:
+    result = kubectl(
+        [
+            "exec",
+            "deployproof-postgresql-0",
+            "-c",
+            "postgresql",
+            "--",
+            "psql",
+            "-U",
+            "deployproof",
+            "-d",
+            "deployproof",
+            "-tAc",
+            statement,
+        ],
+        capture=True,
+    )
+    return result.stdout.strip()
+
+
+def remove_gate_probe() -> None:
+    postgres_sql(f"DELETE FROM inventory_items WHERE sku = '{GATE_PROBE_SKU}';")
+
+
+def verify_live_gate() -> int:
+    ensure_cluster_identity()
+    wait_for_cluster_ready()
+
+    remove_gate_probe()
+    print("== baseline ==")
+    if not run_live_certification()["passed"]:
+        raise RuntimeError("live gate baseline is not green; run deploy before verify-gate")
+
+    print("== drifted database ==")
+    postgres_sql(
+        "INSERT INTO inventory_items (sku, name, quantity, warehouse) "
+        f"VALUES ('{GATE_PROBE_SKU}', 'certification gate probe', 0, 'none');"
+    )
+    try:
+        report = run_live_certification()
+        failing = {check["name"] for check in report["checks"] if not check["passed"]}
+        if report["passed"] or failing != GATE_DRIFT_FAILURES:
+            raise RuntimeError(
+                f"expected drift to fail exactly {sorted(GATE_DRIFT_FAILURES)}, "
+                f"observed failures {sorted(failing)}"
+            )
+    finally:
+        remove_gate_probe()
+
+    print("== restored ==")
+    if not run_live_certification()["passed"]:
+        raise RuntimeError("live gate did not return to green after removing the probe row")
+
+    print(f"ok live gate rejects drift ({sorted(GATE_DRIFT_FAILURES)}) and recovers")
+    return 0
 
 
 def collect_live_diagnostics(reason: str) -> Path:
@@ -826,6 +895,9 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("validate", help="run static manifest and policy gates")
     commands.add_parser("deploy", help="deploy and certify the release in the isolated cluster")
     commands.add_parser("certify", help="compare the release contract with live state")
+    commands.add_parser(
+        "verify-gate", help="prove the live certification gate rejects drift and recovers"
+    )
     commands.add_parser("test", help="run local validation")
     cluster = commands.add_parser("cluster", help="manage only the isolated DeployProof cluster")
     cluster_commands = cluster.add_subparsers(dest="cluster_command", required=True)
@@ -854,6 +926,8 @@ def main() -> int:
         return 0
     if arguments.command == "certify":
         return 0 if certify_live() else 1
+    if arguments.command == "verify-gate":
+        return verify_live_gate()
     if arguments.command == "test":
         test_project()
         return 0

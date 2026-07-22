@@ -72,6 +72,18 @@ def test_incomplete_data_load_fails_certification() -> None:
     assert failed_check_names(observations) == ["database.row_counts"]
 
 
+def test_extra_row_fails_exactly_the_gate_drift_checks() -> None:
+    observations = healthy_observations()
+    observations["release"]["row_counts"] = {"inventory_items": 7}
+    observations["release"]["data_sha256"] = "sha256:" + "c" * 64
+
+    assert set(failed_check_names(observations)) == cli.GATE_DRIFT_FAILURES
+
+
+def test_verify_gate_is_a_registered_command() -> None:
+    assert cli.parser().parse_args(["verify-gate"]).command == "verify-gate"
+
+
 def test_wrong_configuration_fails_certification() -> None:
     observations = healthy_observations()
     observations["configmap"]["data"]["CUSTOMER_REGION"] = "lab-east"
