@@ -33,6 +33,7 @@ is never reused or modified.
 - a k6 load gate whose latency, error-rate, and check-rate thresholds live in the contract and exit non-zero when breached
 - certification evidence written as JSON, Markdown, and JUnit from one result, all agreeing on outcome and counts
 - a GitLab pipeline that runs the same entrypoints as local, with no logic duplicated into CI
+- a teardown proof that measures what the removal left behind and that neighbouring clusters kept running
 - failure diagnostics collected automatically when a deploy fails
 - unit, contract, and gate tests covering the certification, cluster, and gate logic
 
@@ -53,6 +54,7 @@ isolated cluster context.
 | `load` | the release meets the contract's latency, error, and check thresholds under load | `artifacts/state/load.json` |
 | `evidence` | one certification result as agreeing JSON, Markdown, and JUnit | `artifacts/evidence/` |
 | `verify-gate` | the live certification gate rejects drift and self-recovers | none |
+| `clean-room` | teardown removes every DeployProof container and leaves other clusters running | `artifacts/state/clean-room.json` |
 | `cluster create\|status\|delete` | lifecycle of only the isolated `deployproof` cluster | none |
 
 ## Bootstrap
@@ -216,6 +218,27 @@ before the baseline as well, so an interrupted run does not leave the database d
 drift is a real database change rather than an edited report, and it touches no Kubernetes
 resource, so it cannot split field ownership the way an out-of-band `kubectl patch` would.
 
+## Proving teardown leaves a clean room
+
+```bash
+./scripts/lab.sh clean-room
+```
+
+`clean-room` surveys every kind node container on the host, deletes the isolated cluster, then
+surveys again and compares. It requires that no `deployproof` container survives in any state,
+that kind no longer lists the cluster, that the isolated kubeconfig is gone, and that every
+neighbouring cluster is left byte for byte as it was and still running. A stopped container
+counts as one left behind, so `exited` is not a pass. Results are written to
+`artifacts/state/clean-room.json`.
+
+The expected value for the neighbours is their exact state before teardown rather than a count,
+so the check fails if teardown stopped, removed, or otherwise disturbed a cluster that does not
+belong to this project. The command refuses to run at all when there is no neighbouring cluster
+present, because a report that passed in an empty room would not demonstrate isolation.
+
+This command deletes the cluster, so it is not part of the pipeline. Run `./scripts/lab.sh
+deploy` afterwards to bring the lab back up.
+
 ## Isolation
 
 Every kubectl invocation is built by one wrapper that pins the project kubeconfig, the
@@ -270,10 +293,12 @@ and Helm prunes the previous one, so completed Jobs do not accumulate.
 
 ## Status
 
-Stages 1 through 4 and stage 6 of [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) are complete,
-along with the smoke, integration, and load gates from stage 5 and the GitLab pipeline. The
-isolated cluster, live certification of all 14 comparisons, the three service gates, and the
-JSON, Markdown, and JUnit evidence are in place and verified against a live cluster.
+Nine of the ten done criteria in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) are met and
+verified against a live cluster: the isolated cluster, live certification of all 14
+comparisons, the smoke, integration, and load gates, the JSON, Markdown, and JUnit evidence,
+the GitLab pipeline, and the clean-room teardown proof.
 
-The remaining work is the failure-injection and rollback drill, and a clean-room teardown
-proof that leaves no DeployProof containers while KubeDrift keeps running.
+The one criterion left is the failure-injection and rollback drill, which is deliberately not
+done. Proving it the obvious way means deploying a release that is known to be broken, and
+this lab is meant to stay in a working state, so that drill is left for a deliberate session
+rather than being folded into normal use.
