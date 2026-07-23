@@ -437,6 +437,104 @@ def delete_cluster() -> None:
     print(f"ok deleted isolated cluster {CLUSTER_NAME}")
 
 
+def kind_node_survey() -> dict[str, dict[str, str]]:
+    result = run(
+        [
+            "docker",
+            "ps",
+            "--all",
+            "--filter",
+            "label=io.x-k8s.kind.cluster",
+            "--format",
+            '{{.Names}}\t{{.Label "io.x-k8s.kind.cluster"}}\t{{.State}}',
+        ],
+        capture=True,
+    )
+    survey: dict[str, dict[str, str]] = {}
+    for line in result.stdout.splitlines():
+        fields = [field.strip() for field in line.split("\t")]
+        if len(fields) != 3 or not fields[1]:
+            continue
+        container, cluster, state = fields
+        survey.setdefault(cluster, {})[container] = state
+    return survey
+
+
+def neighbour_nodes(survey: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    return {cluster: nodes for cluster, nodes in survey.items() if cluster != CLUSTER_NAME}
+
+
+def evaluate_clean_room(
+    before: dict[str, dict[str, str]],
+    after: dict[str, dict[str, str]],
+    clusters_after: set[str],
+    kubeconfig_present: bool,
+) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+
+    def add(name: str, expected: Any, observed: Any) -> None:
+        checks.append(
+            {
+                "name": name,
+                "expected": expected,
+                "observed": observed,
+                "passed": expected == observed,
+            }
+        )
+
+    add("clean_room.project_containers", {}, after.get(CLUSTER_NAME, {}))
+    add("clean_room.project_cluster_registered", False, CLUSTER_NAME in clusters_after)
+    add("clean_room.isolated_kubeconfig_present", False, kubeconfig_present)
+
+    # Teardown must be inert for every cluster that is not this project's, so the expected
+    # value is the neighbours exactly as they were before, not merely a count of them.
+    after_neighbours = neighbour_nodes(after)
+    add("clean_room.neighbour_nodes_unchanged", neighbour_nodes(before), after_neighbours)
+    add(
+        "clean_room.neighbour_nodes_running",
+        [],
+        sorted(
+            container
+            for nodes in after_neighbours.values()
+            for container, state in nodes.items()
+            if state != "running"
+        ),
+    )
+    return checks
+
+
+def run_clean_room() -> dict[str, Any]:
+    before = kind_node_survey()
+    if CLUSTER_NAME not in before:
+        raise RuntimeError(
+            f"no {CLUSTER_NAME} node container is present, so tearing down would prove nothing; "
+            "run deploy first"
+        )
+    if not neighbour_nodes(before):
+        raise RuntimeError(
+            "no neighbouring kind cluster is present, so this cannot show teardown leaves "
+            "other clusters running"
+        )
+
+    delete_cluster()
+
+    checks = evaluate_clean_room(before, kind_node_survey(), kind_clusters(), KUBECONFIG.is_file())
+    passed = all(check["passed"] for check in checks)
+    report = {"formatVersion": 1, "checks": checks, "passed": passed}
+    output = ARTIFACTS / "state" / "clean-room.json"
+    write_atomic(output, f"{json.dumps(report, indent=2, sort_keys=True)}\n")
+
+    for check in checks:
+        outcome = "PASS" if check["passed"] else "FAIL"
+        print(f"{outcome} {check['name']}")
+    print(output.relative_to(ROOT))
+    return report
+
+
+def clean_room() -> bool:
+    return run_clean_room()["passed"]
+
+
 def apply_namespace_and_secret() -> None:
     namespace_yaml = kubectl(
         ["create", "namespace", NAMESPACE, "--dry-run=client", "--output", "yaml"],
@@ -1220,6 +1318,9 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser(
         "verify-gate", help="prove the live certification gate rejects drift and recovers"
     )
+    commands.add_parser(
+        "clean-room", help="tear down the isolated cluster and prove nothing is left behind"
+    )
     commands.add_parser("test", help="run local validation")
     cluster = commands.add_parser("cluster", help="manage only the isolated DeployProof cluster")
     cluster_commands = cluster.add_subparsers(dest="cluster_command", required=True)
@@ -1258,6 +1359,8 @@ def main() -> int:
         return 0 if evidence_live() else 1
     if arguments.command == "verify-gate":
         return verify_live_gate()
+    if arguments.command == "clean-room":
+        return 0 if clean_room() else 1
     if arguments.command == "test":
         test_project()
         return 0

@@ -249,3 +249,30 @@ Next: GitLab pipeline running the same entrypoints, and clean-room acceptance.
   negative fixtures.
 
 Next: clean-room teardown proof (done-criterion 10).
+
+## 2026-07-22 - Stage 7, clean-room teardown proof
+
+- Added `deployctl clean-room`, which surveys every kind node container on the host, deletes
+  the isolated cluster, surveys again, and compares the two, which is done-criterion 10.
+- Required that no `deployproof` container survives in any state, that kind no longer lists
+  the cluster, and that the isolated kubeconfig is gone. A stopped container counts as one
+  left behind, so `exited` does not pass.
+- Made the expected value for neighbouring clusters their exact state before teardown rather
+  than a count, so the check fails if teardown stopped, removed, or disturbed a cluster that
+  does not belong to this project.
+- Made the command refuse to run when no neighbouring cluster is present, because a report
+  that passed in an empty room would not demonstrate isolation at all.
+- Ran it live: the teardown left zero DeployProof containers, deregistered the cluster, and
+  removed the kubeconfig, while `kubedrift-control-plane` stayed running and its API kept
+  serving. Confirmed independently with `docker ps --all` and a read-only `kubectl get nodes`
+  against the KubeDrift context.
+- Redeployed afterwards from scratch: a cluster created from nothing passes all 14
+  comparisons, and smoke, integration, load, verify-gate, and evidence all exit zero.
+- Left `clean-room` out of the pipeline, since it deletes the cluster and needs a neighbouring
+  cluster to be meaningful, which a CI runner does not have. `tests/test_pipeline.py` records
+  that exclusion and the reason for it.
+- Passed 79 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: nothing outstanding except the failure-injection and rollback drill, which is left
+undone on purpose so the lab is never deployed in a knowingly broken state.

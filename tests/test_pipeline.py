@@ -12,9 +12,11 @@ PIPELINE = ROOT / ".gitlab-ci.yml"
 SCRIPT_SECTIONS = ("before_script", "script", "after_script")
 RESERVED_KEYS = {"stages", "default", "variables", "workflow", "include"}
 
-# certify is the only command the pipeline does not call by name: deploy ends by certifying
-# the release it installed, and evidence certifies again to produce its three reports.
-COMMANDS_NOT_CALLED_IN_CI = {"certify"}
+# certify is not called by name because deploy ends by certifying the release it installed
+# and evidence certifies again to produce its three reports. clean-room is a workstation
+# proof: it requires a neighbouring kind cluster to show teardown is inert, and a CI runner
+# has none, so the live job uses plain cluster delete to clean up instead.
+COMMANDS_NOT_CALLED_IN_CI = {"certify", "clean-room"}
 
 
 def pipeline() -> dict[str, Any]:
