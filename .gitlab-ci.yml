@@ -39,6 +39,7 @@ live certification:
     - ./scripts/lab.sh integration
     - ./scripts/lab.sh load
     - ./scripts/lab.sh verify-gate
+    - ./scripts/lab.sh rollback-drill
     - ./scripts/lab.sh evidence
   after_script:
     - ./scripts/lab.sh cluster delete

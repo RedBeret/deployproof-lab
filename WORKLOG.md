@@ -274,5 +274,31 @@ Next: clean-room teardown proof (done-criterion 10).
 - Passed 79 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
   negative fixtures.
 
-Next: nothing outstanding except the failure-injection and rollback drill, which is left
-undone on purpose so the lab is never deployed in a knowingly broken state.
+Next: the rollback drill (done-criterion 7), without installing a broken release.
+
+## 2026-07-22 - Stage 5, rollback drill
+
+- Added `deployctl rollback-drill`, which certifies the baseline, records the Helm revision,
+  installs a second release that sets a different customer region, then rolls back and
+  requires the declared release to be restored. That is done-criterion 7.
+- Used two valid, healthy releases rather than injecting a broken one. The superseding release
+  passes every smoke check and serves traffic throughout; it is simply not the release the
+  contract declares, which is the case a rollback exists for. The project plan's non-goals now
+  record that deviation and the reason for it.
+- Required the superseding release to fail exactly `configuration.values`,
+  `configuration.sha256`, and `kubernetes.configmap`, so the drill fails if it is measuring
+  something other than what it claims.
+- Put the rollback in a `finally` block, so an assertion failure part way through still leaves
+  the declared release installed instead of stranding the cluster on the superseding one.
+- Made it refuse to start unless the baseline is green, and refuse if the declared release
+  already uses the drill's region, since superseding it would then change nothing.
+- Ran it live: baseline green at revision 2, superseding release at revision 3 healthy with
+  4 of 4 smoke checks passing and exactly the 3 expected certification failures, rollback to
+  revision 2 recorded as revision 4, then 14 of 14 green with the region restored to
+  `lab-west`.
+- Added it to the pipeline's live job, since it always ends with the declared release
+  installed and green.
+- Passed 85 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: nothing outstanding. All ten done criteria are met.

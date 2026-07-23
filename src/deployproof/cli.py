@@ -868,6 +868,143 @@ def verify_live_gate() -> int:
     return 0
 
 
+# The drill's second release is a real, valid, healthy release that simply is not the one the
+# contract declares. Changing the customer region exercises rollback without ever installing a
+# release that is broken: the API keeps serving every declared endpoint throughout.
+ROLLBACK_DRILL_REGION = "lab-east"
+ROLLBACK_DRILL_FAILURES = {
+    "configuration.values",
+    "configuration.sha256",
+    "kubernetes.configmap",
+}
+
+
+def helm_revision() -> int:
+    result = helm_cluster(["status", RELEASE_NAME, "--namespace", NAMESPACE, "--output", "json"])
+    return int(json.loads(result.stdout)["version"])
+
+
+def configured_region() -> str:
+    return kubectl(
+        [
+            "get",
+            "configmap",
+            "deployproof-config",
+            "--output",
+            "jsonpath={.data.CUSTOMER_REGION}",
+        ],
+        capture=True,
+    ).stdout.strip()
+
+
+def wait_for_api_rollout() -> None:
+    kubectl(["rollout", "status", "deployment/deployproof-api", f"--timeout={ROLLOUT_TIMEOUT}"])
+
+
+def helm_release_region(region: str) -> None:
+    digest = recorded_image_digest()
+    if not digest:
+        raise RuntimeError(
+            f"no recorded image digest in {project_path(IMAGE_DIGEST_FILE)}; deploy first"
+        )
+    result = helm_cluster(
+        [
+            "upgrade",
+            RELEASE_NAME,
+            "chart/deployproof",
+            "--namespace",
+            NAMESPACE,
+            "--wait",
+            "--timeout",
+            ROLLOUT_TIMEOUT,
+            *live_release_overrides(digest),
+            "--set-string",
+            f"configuration.customerRegion={region}",
+        ],
+        check=False,
+    )
+    print_process(result)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"superseding release failed to install with exit code {result.returncode}"
+        )
+
+
+def helm_rollback(revision: int) -> None:
+    result = helm_cluster(
+        [
+            "rollback",
+            RELEASE_NAME,
+            str(revision),
+            "--namespace",
+            NAMESPACE,
+            "--wait",
+            "--timeout",
+            ROLLOUT_TIMEOUT,
+        ],
+        check=False,
+    )
+    print_process(result)
+    if result.returncode != 0:
+        raise RuntimeError(f"rollback failed with exit code {result.returncode}")
+
+
+def rollback_drill() -> int:
+    ensure_cluster_identity()
+    wait_for_cluster_ready()
+
+    print("== baseline ==")
+    if not run_live_certification()["passed"]:
+        raise RuntimeError("rollback drill baseline is not green; run deploy before rollback-drill")
+    declared_revision = helm_revision()
+    declared_region = configured_region()
+    if declared_region == ROLLBACK_DRILL_REGION:
+        raise RuntimeError(
+            f"the declared release already uses region {ROLLBACK_DRILL_REGION!r}, "
+            "so superseding it would change nothing"
+        )
+
+    print(f"== superseding release, region {ROLLBACK_DRILL_REGION} ==")
+    try:
+        helm_release_region(ROLLBACK_DRILL_REGION)
+        wait_for_api_rollout()
+
+        # The superseding release must be healthy. This drill proves rollback restores the
+        # declared release; it never installs one that is broken.
+        if not run_smoke()["passed"]:
+            raise RuntimeError("the superseding release is not serving its declared endpoints")
+        if configured_region() != ROLLBACK_DRILL_REGION:
+            raise RuntimeError("the superseding release did not change the live configuration")
+
+        report = run_live_certification()
+        failing = {check["name"] for check in report["checks"] if not check["passed"]}
+        if report["passed"] or failing != ROLLBACK_DRILL_FAILURES:
+            raise RuntimeError(
+                f"expected the superseding release to fail exactly "
+                f"{sorted(ROLLBACK_DRILL_FAILURES)}, observed failures {sorted(failing)}"
+            )
+    finally:
+        helm_rollback(declared_revision)
+        wait_for_api_rollout()
+
+    print("== rolled back ==")
+    restored_region = configured_region()
+    if restored_region != declared_region:
+        raise RuntimeError(
+            f"rollback left region {restored_region!r}, expected {declared_region!r}"
+        )
+    if not run_live_certification()["passed"]:
+        raise RuntimeError("the rolled back release does not certify against the contract")
+    if not run_smoke()["passed"]:
+        raise RuntimeError("the rolled back release is not serving its declared endpoints")
+
+    print(
+        f"ok rolled back revision {helm_revision()} to the declared release "
+        f"{declared_revision}: certification is green and the API is serving"
+    )
+    return 0
+
+
 def canonical_data_hash(items: list[dict[str, Any]]) -> str:
     normalized = [
         {
@@ -1319,6 +1456,9 @@ def parser() -> argparse.ArgumentParser:
         "verify-gate", help="prove the live certification gate rejects drift and recovers"
     )
     commands.add_parser(
+        "rollback-drill", help="prove rollback restores the declared release, using valid releases"
+    )
+    commands.add_parser(
         "clean-room", help="tear down the isolated cluster and prove nothing is left behind"
     )
     commands.add_parser("test", help="run local validation")
@@ -1359,6 +1499,8 @@ def main() -> int:
         return 0 if evidence_live() else 1
     if arguments.command == "verify-gate":
         return verify_live_gate()
+    if arguments.command == "rollback-drill":
+        return rollback_drill()
     if arguments.command == "clean-room":
         return 0 if clean_room() else 1
     if arguments.command == "test":
