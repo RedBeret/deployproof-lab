@@ -24,8 +24,8 @@ for an operator, QA reviewer, or customer handoff.
 - Compare the declared image, configuration fingerprint, application build, migration
   version, row counts, and canonical data hash with live state.
 - Run smoke, integration, and k6 load gates with explicit pass/fail thresholds.
-- Inject a controlled bad release, prove the gate fails, roll back, and prove health is
-  restored.
+- Install a superseding valid release, prove the gate rejects it as undeclared, roll back,
+  and prove the declared release is restored.
 - Produce JSON, Markdown, and JUnit evidence from the same certification result.
 - Provide a GitLab pipeline and a local runner script that execute the same commands.
 
@@ -36,6 +36,10 @@ for an operator, QA reviewer, or customer handoff.
 - A general-purpose Kubernetes deployment platform.
 - Reusing, modifying, or deleting the KubeDrift cluster.
 - Claiming production capacity from a laptop-scale load test.
+- Installing a release that is known to be broken. Criterion 7 was originally written around
+  injecting a bad release. It is proven instead with two valid, healthy releases: the second
+  one serves every declared endpoint but is not the release the contract declares, which is
+  the situation a rollback actually exists for. The lab is never deliberately left unhealthy.
 - Air-gapped packaging in version 1; that is the first planned extension.
 
 ## Isolation and safety contract
@@ -105,7 +109,7 @@ clone:
 4. A valid release deploys and every declared-versus-observed comparison passes.
 5. A wrong configuration or incomplete data load makes certification fail.
 6. k6 thresholds make an unacceptable load result exit non-zero.
-7. The controlled bad release is rolled back and the prior healthy release is proven.
+7. A superseding release is rolled back and the prior declared release is proven restored.
 8. JSON, Markdown, and JUnit evidence agree and contain no secret values.
 9. Local validation and GitLab CI run the same entrypoints.
 10. Teardown leaves no DeployProof containers while KubeDrift remains running.

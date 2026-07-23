@@ -33,6 +33,7 @@ is never reused or modified.
 - a k6 load gate whose latency, error-rate, and check-rate thresholds live in the contract and exit non-zero when breached
 - certification evidence written as JSON, Markdown, and JUnit from one result, all agreeing on outcome and counts
 - a GitLab pipeline that runs the same entrypoints as local, with no logic duplicated into CI
+- a rollback drill that restores the declared release without ever installing a broken one
 - a teardown proof that measures what the removal left behind and that neighbouring clusters kept running
 - failure diagnostics collected automatically when a deploy fails
 - unit, contract, and gate tests covering the certification, cluster, and gate logic
@@ -54,6 +55,7 @@ isolated cluster context.
 | `load` | the release meets the contract's latency, error, and check thresholds under load | `artifacts/state/load.json` |
 | `evidence` | one certification result as agreeing JSON, Markdown, and JUnit | `artifacts/evidence/` |
 | `verify-gate` | the live certification gate rejects drift and self-recovers | none |
+| `rollback-drill` | rollback restores the declared release, using only healthy releases | none |
 | `clean-room` | teardown removes every DeployProof container and leaves other clusters running | `artifacts/state/clean-room.json` |
 | `cluster create\|status\|delete` | lifecycle of only the isolated `deployproof` cluster | none |
 
@@ -218,6 +220,30 @@ before the baseline as well, so an interrupted run does not leave the database d
 drift is a real database change rather than an edited report, and it touches no Kubernetes
 resource, so it cannot split field ownership the way an out-of-band `kubectl patch` would.
 
+## Rollback drill
+
+```bash
+./scripts/lab.sh rollback-drill
+```
+
+`rollback-drill` proves that rolling back restores the declared release. It certifies the
+baseline, records the Helm revision, then installs a second release that sets a different
+customer region. That release is valid and healthy: it passes every smoke check and serves
+traffic the whole time. It is simply not the release the contract declares, so certification
+fails exactly `configuration.values`, `configuration.sha256`, and `kubernetes.configmap`,
+which is the situation a rollback exists for. The drill then rolls back to the recorded
+revision and requires the live configuration to match the declared value again, certification
+to return to 14 of 14, and smoke to pass.
+
+The rollback runs in a `finally` block, so an assertion failure part way through still leaves
+the declared release installed rather than stranding the cluster on the superseding one. The
+drill refuses to start unless the baseline is already green, and refuses if the declared
+release already uses the drill's region, since superseding it would then change nothing.
+
+The lab never installs a release that is known to be broken. Both releases in the drill are
+healthy, which is why this is safe to run against a working cluster and why it is part of the
+pipeline.
+
 ## Proving teardown leaves a clean room
 
 ```bash
@@ -293,12 +319,12 @@ and Helm prunes the previous one, so completed Jobs do not accumulate.
 
 ## Status
 
-Nine of the ten done criteria in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) are met and
-verified against a live cluster: the isolated cluster, live certification of all 14
-comparisons, the smoke, integration, and load gates, the JSON, Markdown, and JUnit evidence,
-the GitLab pipeline, and the clean-room teardown proof.
+All ten done criteria in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) are met and verified
+against a live cluster: the isolated cluster, live certification of all 14 comparisons, the
+smoke, integration, and load gates, the rollback drill, the JSON, Markdown, and JUnit
+evidence, the GitLab pipeline, and the clean-room teardown proof.
 
-The one criterion left is the failure-injection and rollback drill, which is deliberately not
-done. Proving it the obvious way means deploying a release that is known to be broken, and
-this lab is meant to stay in a working state, so that drill is left for a deliberate session
-rather than being folded into normal use.
+Criterion 7 was originally written around injecting a release known to be broken. It is
+proven instead with two valid, healthy releases, for the reason given in the project plan's
+non-goals: the lab is never deliberately left unhealthy, and a superseding release that
+serves traffic but is not the declared one is the case a rollback actually exists for.
