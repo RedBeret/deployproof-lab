@@ -32,6 +32,7 @@ is never reused or modified.
 - an integration check that reads the live database directly and confirms the running app reports the same rows
 - a k6 load gate whose latency, error-rate, and check-rate thresholds live in the contract and exit non-zero when breached
 - certification evidence written as JSON, Markdown, and JUnit from one result, all agreeing on outcome and counts
+- a GitLab pipeline that runs the same entrypoints as local, with no logic duplicated into CI
 - failure diagnostics collected automatically when a deploy fails
 - unit, contract, and gate tests covering the certification, cluster, and gate logic
 
@@ -180,6 +181,25 @@ operator view, and `certification.xml` is a JUnit report for CI. All three carry
 outcome and the same passed, failed, and total counts, and none contain credential values.
 The command exits non-zero when certification fails.
 
+## Continuous integration
+
+`.gitlab-ci.yml` runs the same entrypoints as a workstation. The `static gate` job runs the
+local validation sequence documented above, and `live certification` deploys into a fresh
+kind cluster, runs the smoke, integration, load, and gate checks, and publishes
+`artifacts/evidence/certification.xml` as the pipeline's JUnit report so failed comparisons
+appear as failed tests. Cluster deletion runs in `after_script`, so a pipeline that fails a
+gate still leaves no cluster behind.
+
+The pipeline contains no build, validation, or certification logic of its own. Every line in
+it is either `./scripts/bootstrap.sh` or a `./scripts/lab.sh` command, which is what keeps CI
+and a workstation from drifting apart. `tests/test_pipeline.py` enforces that: it fails if a
+job runs anything other than a real `deployctl` command, if the static stage stops matching
+the sequence in this README, if a gate stops running in CI, or if the teardown is removed.
+
+It needs a runner tagged `deployproof-lab` with a usable Docker daemon, bound to the host
+Docker socket rather than a nested docker-in-docker service, because the live job builds an
+image, runs the pinned tool containers, and creates a kind cluster it has to reach.
+
 ## Proving the live gate can fail
 
 The static gate keeps negative fixtures that must be rejected. The live gate has one too:
@@ -251,10 +271,9 @@ and Helm prunes the previous one, so completed Jobs do not accumulate.
 ## Status
 
 Stages 1 through 4 and stage 6 of [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) are complete,
-along with the smoke, integration, and load gates from stage 5. The isolated cluster, live
-certification of all 14 comparisons, the three service gates, and the JSON, Markdown, and
-JUnit evidence are in place and verified against a live cluster.
+along with the smoke, integration, and load gates from stage 5 and the GitLab pipeline. The
+isolated cluster, live certification of all 14 comparisons, the three service gates, and the
+JSON, Markdown, and JUnit evidence are in place and verified against a live cluster.
 
-The remaining work is the failure-injection and rollback drill, a GitLab pipeline that runs
-the same `./scripts/lab.sh` entrypoints as local, and a clean-room teardown proof that leaves
-no DeployProof containers while KubeDrift keeps running.
+The remaining work is the failure-injection and rollback drill, and a clean-room teardown
+proof that leaves no DeployProof containers while KubeDrift keeps running.

@@ -225,3 +225,27 @@ Next: prove rollback restores a prior healthy release (done-criterion 7).
   negative fixtures.
 
 Next: GitLab pipeline running the same entrypoints, and clean-room acceptance.
+
+## 2026-07-22 - Stage 7, GitLab pipeline
+
+- Added `.gitlab-ci.yml` with a `static gate` job that runs the local validation sequence and
+  a `live certification` job that deploys into a fresh kind cluster and runs the smoke,
+  integration, load, and gate checks.
+- Kept every script line in the pipeline to either `./scripts/bootstrap.sh` or a
+  `./scripts/lab.sh` command, so CI holds no build or certification logic that could drift
+  from what an operator runs, which is done-criterion 9.
+- Published `artifacts/evidence/certification.xml` as the pipeline's JUnit report, so a failed
+  comparison shows up as a failed test rather than only in the job log.
+- Put cluster deletion in `after_script` so a pipeline that fails a gate still leaves no
+  cluster on the runner.
+- Added `tests/test_pipeline.py`, which reads the subcommands straight from the `deployctl`
+  parser and fails if a job runs anything else, if the static stage stops matching the
+  sequence documented in the README, if a declared gate stops running in CI, or if the
+  teardown is removed.
+- Confirmed the new tests fail on each of those regressions before accepting them, by
+  substituting an inline `docker build` for an entrypoint, deleting the `verify-gate` line,
+  and deleting the teardown line in turn.
+- Passed 70 tests, Ruff, shell syntax checks, Helm lint, Kubeconform, Kyverno, and both
+  negative fixtures.
+
+Next: clean-room teardown proof (done-criterion 10).

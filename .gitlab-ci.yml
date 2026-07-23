@@ -1,0 +1,52 @@
+# Every script line below is an entrypoint an operator also runs locally. The pipeline
+# holds no build, validation, or certification logic of its own, so CI and a workstation
+# cannot drift apart. tests/test_pipeline.py enforces that.
+#
+# Requires a runner with a usable Docker daemon, because the lab builds an image, runs its
+# pinned tool containers, and creates a kind cluster. The live job needs that daemon to
+# reach the kind node, so run it on a runner bound to the host Docker socket rather than a
+# nested docker-in-docker service.
+
+stages:
+  - static
+  - live
+
+default:
+  tags:
+    - deployproof-lab
+  before_script:
+    - ./scripts/bootstrap.sh
+
+static gate:
+  stage: static
+  script:
+    - ./scripts/lab.sh doctor
+    - ./scripts/lab.sh test
+    - ./scripts/lab.sh build
+    - ./scripts/lab.sh render
+    - ./scripts/lab.sh validate
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - artifacts/rendered/
+
+live certification:
+  stage: live
+  script:
+    - ./scripts/lab.sh deploy
+    - ./scripts/lab.sh smoke
+    - ./scripts/lab.sh integration
+    - ./scripts/lab.sh load
+    - ./scripts/lab.sh verify-gate
+    - ./scripts/lab.sh evidence
+  after_script:
+    - ./scripts/lab.sh cluster delete
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - artifacts/evidence/
+      - artifacts/state/
+    reports:
+      junit: artifacts/evidence/certification.xml
