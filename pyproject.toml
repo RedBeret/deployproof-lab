@@ -9,7 +9,7 @@ description = "Kubernetes release certification and deployment evidence lab"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-authors = [{ name = "Steven Espinoza" }]
+authors = [{ name = "RedBeret" }]
 dependencies = [
   "psycopg[binary]==3.3.4",
 ]
