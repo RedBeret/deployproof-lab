@@ -24,7 +24,7 @@ smoke:
     status: 200
     expect:
       application: deployproof-inventory
-      project: DeployProof Lab
+      project: release-verify
   - path: /live
     status: 200
     expect:

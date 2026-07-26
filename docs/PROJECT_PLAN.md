@@ -1,8 +1,8 @@
-# DeployProof Lab project plan
+# release-verify project plan
 
 ## Objective
 
-DeployProof Lab certifies that a Kubernetes release was configured, installed, loaded,
+release-verify certifies that a Kubernetes release was configured, installed, loaded,
 and exercised correctly. A release is not considered successful merely because its Pods
 are running. The lab compares the declared release contract with live cluster state,
 application state, database state, and load-test results, then emits evidence suitable
@@ -112,4 +112,4 @@ clone:
 7. A superseding release is rolled back and the prior declared release is proven restored.
 8. JSON, Markdown, and JUnit evidence agree and contain no secret values.
 9. Local validation and GitLab CI run the same entrypoints.
-10. Teardown leaves no DeployProof containers while KubeDrift remains running.
+10. Teardown leaves no release-verify containers while KubeDrift remains running.

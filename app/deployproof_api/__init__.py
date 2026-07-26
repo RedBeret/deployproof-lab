@@ -1,1 +1,1 @@
-"""DeployProof sample application."""
+"""release-verify sample application."""

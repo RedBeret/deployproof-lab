@@ -13,7 +13,7 @@ APP_NAME = "deployproof-inventory"
 APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
 SOURCE_REVISION = os.getenv("SOURCE_REVISION", "local")
 
-app = FastAPI(title="DeployProof Inventory API", version=APP_VERSION)
+app = FastAPI(title="release-verify Inventory API", version=APP_VERSION)
 
 
 def configuration() -> dict[str, str]:
@@ -74,7 +74,7 @@ def release_payload() -> dict[str, Any]:
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"application": APP_NAME, "project": "DeployProof Lab"}
+    return {"application": APP_NAME, "project": "release-verify"}
 
 
 @app.get("/live")
