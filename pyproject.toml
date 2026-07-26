@@ -3,7 +3,7 @@ requires = ["setuptools>=80"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "deployproof-lab"
+name = "release-verify"
 version = "0.1.0"
 description = "Kubernetes release certification and deployment evidence lab"
 readme = "README.md"

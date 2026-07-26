@@ -13,7 +13,7 @@ stages:
 
 default:
   tags:
-    - deployproof-lab
+    - release-verify
   before_script:
     - ./scripts/bootstrap.sh
 

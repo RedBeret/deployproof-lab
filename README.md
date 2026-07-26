@@ -1,6 +1,6 @@
-# DeployProof Lab
+# release-verify
 
-DeployProof Lab is a Kubernetes release-certification project. It proves that a candidate
+release-verify is a Kubernetes release-certification project. It proves that a candidate
 release was configured, installed, loaded, and exercised correctly, rather than treating a
 successful `kubectl apply` as sufficient evidence. It deploys a small inventory API and its
 PostgreSQL database into an isolated kind cluster, compares a declared release contract
@@ -56,7 +56,7 @@ isolated cluster context.
 | `evidence` | one certification result as agreeing JSON, Markdown, and JUnit | `artifacts/evidence/` |
 | `verify-gate` | the live certification gate rejects drift and self-recovers | none |
 | `rollback-drill` | rollback restores the declared release, using only healthy releases | none |
-| `clean-room` | teardown removes every DeployProof container and leaves other clusters running | `artifacts/state/clean-room.json` |
+| `clean-room` | teardown removes every release-verify container and leaves other clusters running | `artifacts/state/clean-room.json` |
 | `cluster create\|status\|delete` | lifecycle of only the isolated `deployproof` cluster | none |
 
 ## Bootstrap
@@ -200,7 +200,7 @@ and a workstation from drifting apart. `tests/test_pipeline.py` enforces that: i
 job runs anything other than a real `deployctl` command, if the static stage stops matching
 the sequence in this README, if a gate stops running in CI, or if the teardown is removed.
 
-It needs a runner tagged `deployproof-lab` with a usable Docker daemon, bound to the host
+It needs a runner tagged `release-verify` with a usable Docker daemon, bound to the host
 Docker socket rather than a nested docker-in-docker service, because the live job builds an
 image, runs the pinned tool containers, and creates a kind cluster it has to reach.
 

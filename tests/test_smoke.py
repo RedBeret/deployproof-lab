@@ -14,7 +14,7 @@ def smoke_specs() -> list[dict[str, Any]]:
 
 def healthy_responses() -> dict[str, tuple[int | None, Any]]:
     return {
-        "/": (200, {"application": "deployproof-inventory", "project": "DeployProof Lab"}),
+        "/": (200, {"application": "deployproof-inventory", "project": "release-verify"}),
         "/live": (200, {"status": "alive"}),
         "/health": (200, {"status": "healthy"}),
         "/release-info": (200, {"application": "deployproof-inventory", "source_revision": "abc"}),
@@ -42,7 +42,7 @@ def test_degraded_health_fails_smoke() -> None:
 
 def test_wrong_body_field_fails_smoke() -> None:
     responses = healthy_responses()
-    responses["/"] = (200, {"application": "someone-elses-app", "project": "DeployProof Lab"})
+    responses["/"] = (200, {"application": "someone-elses-app", "project": "release-verify"})
 
     assert failing_names(responses) == ["smoke /"]
 

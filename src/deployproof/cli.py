@@ -1178,7 +1178,7 @@ def build_evidence(checks: list[dict[str, Any]], generated_at: str) -> dict[str,
 def render_markdown(evidence: dict[str, Any]) -> str:
     counts = evidence["counts"]
     lines = [
-        "# DeployProof certification",
+        "# release-verify certification",
         "",
         f"- Generated: {evidence['generatedAt']}",
         f"- Outcome: {evidence['outcome']}",
@@ -1251,7 +1251,7 @@ def evidence_live() -> bool:
 
 
 def collect_live_diagnostics(reason: str) -> Path:
-    sections = [f"DeployProof deployment diagnostics\nreason: {reason}\n"]
+    sections = [f"release-verify deployment diagnostics\nreason: {reason}\n"]
 
     def record(label: str, result: subprocess.CompletedProcess[str]) -> None:
         sections.append(
@@ -1462,7 +1462,7 @@ def parser() -> argparse.ArgumentParser:
         "clean-room", help="tear down the isolated cluster and prove nothing is left behind"
     )
     commands.add_parser("test", help="run local validation")
-    cluster = commands.add_parser("cluster", help="manage only the isolated DeployProof cluster")
+    cluster = commands.add_parser("cluster", help="manage only the isolated release-verify cluster")
     cluster_commands = cluster.add_subparsers(dest="cluster_command", required=True)
     cluster_commands.add_parser("create", help="create or verify the isolated cluster")
     cluster_commands.add_parser("status", help="show the isolated cluster status")
