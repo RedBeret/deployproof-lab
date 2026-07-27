@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Every run step below is an entrypoint an operator also runs locally, the same rule
+# .gitlab-ci.yml follows. tests/test_github_actions.py enforces it.
+#
+# This runs the static gate only. Live certification creates a kind cluster and is written
+# for a runner bound to the host Docker socket, which is what .gitlab-ci.yml expects. That
+# path has never been exercised on a hosted runner, so it is not claimed here.
+jobs:
+  static-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Bootstrap project environment
+        run: ./scripts/bootstrap.sh
+
+      - name: Check the local operator environment
+        run: ./scripts/lab.sh doctor
+
+      - name: Run unit, contract, and lint checks
+        run: ./scripts/lab.sh test
+
+      - name: Build the application image
+        run: ./scripts/lab.sh build
+
+      - name: Render the chart
+        run: ./scripts/lab.sh render
+
+      - name: Validate schemas, policies, and negative fixtures
+        run: ./scripts/lab.sh validate
+
+      - name: Publish rendered manifests
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rendered-manifests
+          path: artifacts/rendered/
+          if-no-files-found: error
