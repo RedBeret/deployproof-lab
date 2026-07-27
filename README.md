@@ -1,5 +1,10 @@
 # release-verify
 
+[![CI](https://github.com/RedBeret/release-verify/actions/workflows/ci.yml/badge.svg)](https://github.com/RedBeret/release-verify/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.35-326CE5?logo=kubernetes&logoColor=white)](kind/cluster.yaml)
+[![Helm](https://img.shields.io/badge/Helm-4.2-0F1689?logo=helm&logoColor=white)](chart/deployproof/Chart.yaml)
+
 release-verify is a Kubernetes release-certification project. It proves that a candidate
 release was configured, installed, loaded, and exercised correctly, rather than treating a
 successful `kubectl apply` as sufficient evidence. It deploys a small inventory API and its
@@ -186,6 +191,18 @@ outcome and the same passed, failed, and total counts, and none contain credenti
 The command exits non-zero when certification fails.
 
 ## Continuous integration
+
+Two pipelines, both running the same `./scripts/lab.sh` entrypoints a workstation does.
+
+`.github/workflows/ci.yml` runs the static gate: `doctor`, `test`, `build`, `render`, and
+`validate`, then publishes the rendered manifests. It does not attempt live certification,
+because that creates a kind cluster and is written for a runner bound to the host Docker
+socket. Claiming it works on a hosted runner would be an untested promise, so
+`tests/test_github_actions.py` fails if a live gate is added there.
+
+That test also fails if the GitHub static sequence stops matching the GitLab one, since two
+pipelines running different static gates is exactly the drift worth catching, and if any
+run step is something other than a real `deployctl` entrypoint.
 
 `.gitlab-ci.yml` runs the same entrypoints as a workstation. The `static gate` job runs the
 local validation sequence documented above, and `live certification` deploys into a fresh
